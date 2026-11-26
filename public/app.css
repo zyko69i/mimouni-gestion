@@ -360,8 +360,7 @@ tr:last-child td { border-bottom: none; }
 
 /* Responsive improvements */
 @media (max-width: 899px) {
-  .side { display: none; }
-  main { padding: 1.25rem 1rem; }
+  main { padding: 1.25rem 1rem; padding-top: 4.5rem; }
 }
 @media (max-width: 640px) {
   .brand-rest, #net-label { display: none; }

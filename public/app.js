@@ -451,6 +451,11 @@ function renderShell() {
   const side = $('#side');
   const toggle = $('#menu-toggle');
   toggle.onclick = () => side.classList.toggle('open');
+  document.addEventListener('click', (e) => {
+    if (window.innerWidth < 900 && side.classList.contains('open') && !side.contains(e.target) && e.target !== toggle) {
+      side.classList.remove('open');
+    }
+  });
   side.querySelectorAll('a').forEach(a => a.onclick = () => { if (window.innerWidth < 900) side.classList.remove('open'); });
   paintStatus();
 }
