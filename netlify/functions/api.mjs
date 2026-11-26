@@ -139,7 +139,8 @@ async function bootstrap(user) {
   const out = {
     me: publicUser(user), company: company || { name: COMPANY }, serverTime: now(),
     chantiers: visChantiers, tasks: visTasks, technicians: visTechs, assignments: visAssign,
-    absences: visAbs, equipment, recent,
+    // Le chef ne voit que le matériel de ses chantiers (et le matériel sans chantier)
+    absences: visAbs, equipment: user.role === 'chef' ? equipment.filter((e) => !e.chantierId || sc.chantierIds.has(e.chantierId)) : equipment, recent,
   };
   if (user.role === 'admin') out.users = (await db.list('users')).map(publicUser);
   else out.users = (await db.list('users')).filter((u) => u.role !== 'technicien' || sc.techIds.has(u.technicianId)).map((u) => ({ login: u.login, name: u.name, role: u.role, technicianId: u.technicianId || '' }));
@@ -474,6 +475,10 @@ async function route(req) {
 
   // ----- Équipements et historique -----
   if (r0 === 'equipment') {
+    if (r1 && user.role === 'chef') {
+      const eqc = await db.get('equipment', r1);
+      if (eqc && eqc.chantierId && !(await scope(user)).chantierIds.has(eqc.chantierId)) return deny('Ce matériel appartient à un chantier qui n\'est pas le vôtre.');
+    }
     if (m === 'POST' && !r1) {
       if (!isAdmin) return deny('Seul l\'administrateur crée les fiches matériel et leurs QR codes.');
       let id = eqCode();
