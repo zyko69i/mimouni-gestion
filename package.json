@@ -1,0 +1,10 @@
+{
+  "name": "mimouni-gestion",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Logiciel de gestion MIMOUNI INDUSTRIEL ÉLECTRICITÉ (chantiers, techniciens, planning, matériel, QR codes)",
+  "dependencies": {
+    "@netlify/blobs": "^11.1.12"
+  }
+}
