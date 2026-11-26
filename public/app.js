@@ -440,9 +440,6 @@ function navItems() {
 }
 function renderShell() {
   $('#app').innerHTML = `
-  <header class="topbar">${brandHTML()}
-    <div class="status"><span class="dot" id="net-dot" title="Connexion"></span><span id="net-label" class="small"></span><span class="badge-sync" id="sync-badge">Sauvegardé</span></div>
-  </header>
   <div class="layout">
     <nav class="side">${navItems().map(([href, ic, lab]) => `<a href="${href}" data-nav="${href}">${ICON[ic]}<span>${esc(lab)}</span></a>`).join('')}
       <div class="sep"></div><div class="small" style="padding:.3rem .7rem;color:#aaa">${esc(S.me.name)}<br>${esc(ROLE_LABEL[S.me.role])}</div>
@@ -457,7 +454,6 @@ function renderShell() {
     <a href="#/plus" data-nav="#/plus">${ICON.more}<span>Plus</span></a>
   </nav>`;
   $('#logout-side').onclick = (e) => { e.preventDefault(); logout(); };
-  $('#sync-badge').onclick = () => { if ((S.rejected || []).length) { location.hash = '#/envois'; return; } if (S.queue.length) { if (navigator.onLine) proposeSync(); else toast(queueSummary(S.queue) + ' – envoi au retour du réseau.'); } else toast(S.lastSync ? 'Données à jour (' + fmtDT(S.lastSync) + ')' : 'Données à jour'); };
   paintStatus();
 }
 function paintStatus() {
