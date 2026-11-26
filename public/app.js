@@ -440,20 +440,18 @@ function navItems() {
 }
 function renderShell() {
   $('#app').innerHTML = `
+  <button class="menu-toggle" id="menu-toggle" aria-label="Menu">☰</button>
   <div class="layout">
-    <nav class="side">${navItems().map(([href, ic, lab]) => `<a href="${href}" data-nav="${href}">${ICON[ic]}<span>${esc(lab)}</span></a>`).join('')}
+    <nav class="side" id="side">${navItems().map(([href, ic, lab]) => `<a href="${href}" data-nav="${href}">${ICON[ic]}<span>${esc(lab)}</span></a>`).join('')}
       <div class="sep"></div><div class="small" style="padding:.3rem .7rem;color:#aaa">${esc(S.me.name)}<br>${esc(ROLE_LABEL[S.me.role])}</div>
       <a href="#" id="logout-side"><span>Se déconnecter</span></a></nav>
     <main id="view"></main>
-  </div>
-  <nav class="bottomnav">
-    <a href="#/" data-nav="#/">${ICON.home}<span>Accueil</span></a>
-    <a href="#/chantiers" data-nav="#/chantiers">${ICON.site}<span>Chantiers</span></a>
-    <a href="#/scanner" class="scan" data-nav="#/scanner" aria-label="Scanner"><span class="round">${ICON.scan}</span><span>Scanner</span></a>
-    <a href="#/planning" data-nav="#/planning">${ICON.cal}<span>Planning</span></a>
-    <a href="#/plus" data-nav="#/plus">${ICON.more}<span>Plus</span></a>
-  </nav>`;
+  </div>`;
   $('#logout-side').onclick = (e) => { e.preventDefault(); logout(); };
+  const side = $('#side');
+  const toggle = $('#menu-toggle');
+  toggle.onclick = () => side.classList.toggle('open');
+  side.querySelectorAll('a').forEach(a => a.onclick = () => { if (window.innerWidth < 900) side.classList.remove('open'); });
   paintStatus();
 }
 function paintStatus() {
