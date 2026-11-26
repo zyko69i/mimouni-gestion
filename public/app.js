@@ -46,7 +46,7 @@ const idb = (() => {
     r.onupgradeneeded = () => { r.result.createObjectStore('kv'); r.result.createObjectStore('queue', { keyPath: 'qid' }); };
     r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
   }));
-  const tx = async (store, mode, fn) => { const db = await open(); return new Promise((res, rej) => { const t = db.transaction(store, mode); const s = t.objectStore(store); const out = fn(s); t.oncomplete = () => res(out && out.result !== undefined ? out.result : out); t.onerror = () => rej(t.error); }); };
+  const tx = async (store, mode, fn) => { const db = await open(); return new Promise((res, rej) => { const t = db.transaction(store, mode); const s = t.objectStore(store); const out = fn(s); t.oncomplete = () => res(out instanceof IDBRequest ? out.result : out); t.onerror = () => rej(t.error); }); };
   return {
     get: (k) => tx('kv', 'readonly', (s) => s.get(k)),
     set: (k, v) => tx('kv', 'readwrite', (s) => s.put(v, k)),
@@ -232,7 +232,7 @@ const isAdmin = () => S.me && S.me.role === 'admin';
 const isChef = () => S.me && S.me.role === 'chef';
 const isTech = () => S.me && S.me.role === 'technicien';
 const demoTag = (x) => (x && x.demo ? ' <span class="pill demo">Exemple</span>' : '');
-const absLabel = (a) => (a.redacted ? 'Absent' : ({ absence: 'Absence', retard: 'Retard', 'congé': 'Congé', maladie: 'Maladie', 'non-présentation': 'Non-présentation' }[a.type] || a.type));
+const absLabel = (a) => (({ absence: 'Absent', retard: 'Retard', 'congé': 'Congé', maladie: 'Maladie', 'non-présentation': 'Non-présentation' }[a.type] || a.type));
 
 // ---------------- calculs ----------------
 // Jours fériés français (fixes + Pâques)
@@ -449,7 +449,16 @@ async function render() {
   catch (e) { view.innerHTML = `<div class="card"><p class="err">${esc(e.message)}</p></div>`; }
   window.scrollTo(0, 0);
 }
-window.addEventListener('hashchange', () => { stopCamera(); render(); });
+let lastBg = 0;
+async function backgroundRefresh() {
+  if (!navigator.onLine || !S.token || Date.now() - lastBg < 15000) return;
+  lastBg = Date.now();
+  const before = JSON.stringify(S.data);
+  try { await loadData(); } catch { return; }
+  if (JSON.stringify(S.data) !== before && !$('.modal-bg') && !camStream) render();
+}
+window.addEventListener('hashchange', async () => { stopCamera(); await render(); backgroundRefresh(); });
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') backgroundRefresh(); });
 
 // ---------------- démarrage ----------------
 async function start() {
@@ -789,7 +798,7 @@ ROUTES.absences = async (v) => {
   v.innerHTML = `<div class="head"><h1>Présences et absences</h1><button class="btn primary" id="new-abs">${isTech() ? 'Demander un congé' : '+ Signaler'}</button></div>
   <div class="grid g4" style="margin-bottom:1rem">${kpi(todayAbs.length, 'Absents / retards aujourd\'hui', todayAbs.length ? 'red' : 'ok')}${kpi(list.filter((a) => a.status === 'Signalée' || a.status === 'Demandée').length, 'À valider')}</div>
   <div class="card"><div class="table-wrap"><table><thead><tr><th>Technicien</th><th>Type</th><th>Dates</th><th>Motif</th><th>Statut</th><th>Signalé par</th><th></th></tr></thead><tbody>
-  ${list.map((a) => `<tr><td>${esc(techName(a.techId))}${demoTag(a)}</td><td><span class="pill ${a.type === 'maladie' ? 'red' : ''}">${esc(absLabel(a))}</span></td><td>${fmtD(a.start)}${a.end && a.end !== a.start ? ' → ' + fmtD(a.end) : ''}${a.time ? ' · ' + esc(a.time) : ''}</td><td class="small">${a.redacted ? '<span class="muted">Non visible</span>' : esc(a.motif || '')}</td><td><span class="pill ${a.status === 'Validée' ? 'green' : a.status === 'Refusée' ? 'red' : 'orange'}">${esc(a.status)}</span></td><td class="small">${esc(userName(a.author))}</td><td>${isAdmin() && a.status !== 'Validée' ? `<button class="btn sm" data-val="${a.id}">Valider</button> <button class="btn sm" data-ref="${a.id}">Refuser</button>` : ''}${isAdmin() ? ` <button class="btn sm" data-edit-abs="${a.id}">Corriger</button>` : ''}</td></tr>`).join('') || '<tr><td colspan="7" class="muted">Aucune absence.</td></tr>'}
+  ${list.map((a) => `<tr><td>${esc(techName(a.techId))}${demoTag(a)}</td><td><span class="pill ${a.type === 'maladie' ? 'red' : ''}">${esc(absLabel(a))}</span></td><td>${fmtD(a.start)}${a.end && a.end !== a.start ? ' → ' + fmtD(a.end) : ''}${a.time ? ' · ' + esc(a.time) : ''}</td><td class="small">${esc(a.motif || '')}</td><td><span class="pill ${a.status === 'Validée' ? 'green' : a.status === 'Refusée' ? 'red' : 'orange'}">${esc(a.status)}</span></td><td class="small">${esc(userName(a.author))}</td><td>${isAdmin() && a.status !== 'Validée' ? `<button class="btn sm" data-val="${a.id}">Valider</button> <button class="btn sm" data-ref="${a.id}">Refuser</button>` : ''}${isAdmin() ? ` <button class="btn sm" data-edit-abs="${a.id}">Corriger</button>` : ''}</td></tr>`).join('') || '<tr><td colspan="7" class="muted">Aucune absence.</td></tr>'}
   </tbody></table></div>${isChef() ? '<p class="muted small">Pour respecter la vie privée, un arrêt maladie apparaît comme « Absent » : seul l\'administrateur voit le motif.</p>' : ''}</div>`;
   $('#new-abs', v).onclick = () => {
     const techs = isTech() ? [[S.me.technicianId, 'Moi']] : D().technicians.filter((t) => t.active !== false).map((t) => [t.id, t.firstName + ' ' + t.lastName]);
@@ -864,7 +873,7 @@ ROUTES.equipement = async (v, id) => {
       ${x.type === 'correction' ? `<div class="small">Corrige l'entrée du ${fmtDT((hist.find((o) => o.id === x.correctsId) || {}).at)} – motif : ${esc(x.reason)}</div>` : ''}
       ${x.type === 'masquage' ? `<div class="small">L'administrateur a masqué l'entrée du ${fmtDT((hist.find((o) => o.id === x.correctsId) || {}).at)} – motif : ${esc(x.reason)}</div>` : ''}
       ${mask && !isAdmin() ? '<div class="content muted">Contenu masqué par l\'administrateur (conservé dans l\'historique).</div>' : `<div class="content">${esc(x.content)}</div>`}
-      ${corr.length ? `<div class="small" style="color:var(--orange)">Corrigée le ${fmtDT(corr[corr.length - 1].at)} par ${esc(corr[corr.length - 1].authorName)} – l'original reste visible ci-dessus.</div>` : ''}
+      ${corr.length ? `<div class="small" style="color:var(--orange)">Corrigée le ${fmtDT(corr[corr.length - 1].at)} par ${esc(corr[corr.length - 1].authorName)} – l'original reste visible.</div>` : ''}
       ${photosHTML(x.photos)}
       <div class="row" style="margin-top:.3rem">${canCorrect ? `<button class="btn sm" data-correct="${x.id}">Corriger</button>` : ''}${isAdmin() && x.type !== 'masquage' && !mask ? `<button class="btn sm" data-mask="${x.id}">Masquer</button>` : ''}</div></div>`;
   };
@@ -1039,7 +1048,7 @@ ROUTES.rapports = async (v) => {
   </div>`;
   $('#rp-go', v).onclick = async () => { const c = chantierById($('#rp-ch', v).value); if (c) { try { await chantierPDF(c); } catch (e) { toast(e.message); } } };
   $('#x-tasks', v).onclick = () => download(`taches-${todayISO()}.csv`, new Blob([csv([['Chantier', 'Tâche', 'Statut', 'Heures prévues', 'Heures réalisées', 'Échéance', 'Affecté à'], ...D().tasks.map((t) => [chantierById(t.chantierId)?.name, t.title, t.status, String(t.plannedHours).replace('.', ','), String(t.doneHours).replace('.', ','), t.end, techName(t.assignee)])])], { type: 'text/csv' }));
-  $('#x-abs', v).onclick = () => download(`absences-${todayISO()}.csv`, new Blob([csv([['Technicien', 'Type', 'Du', 'Au', 'Statut', 'Motif'], ...D().absences.map((a) => [techName(a.techId), absLabel(a), a.start, a.end, a.status, a.redacted ? '' : a.motif])])], { type: 'text/csv' }));
+  $('#x-abs', v).onclick = () => download(`absences-${todayISO()}.csv`, new Blob([csv([['Technicien', 'Type', 'Du', 'Au', 'Statut', 'Motif'], ...D().absences.map((a) => [techName(a.techId), absLabel(a), a.start, a.end, a.status, a.motif])])], { type: 'text/csv' }));
   const xh = $('#x-habs', v); if (xh) xh.onclick = () => download(`habilitations-${todayISO()}.csv`, new Blob([csv([['Technicien', 'Type', 'Symbole', 'Délivrée', 'Fin de validité', 'État'], ...D().technicians.flatMap((t) => currentHabs(t).map((hb) => [t.firstName + ' ' + t.lastName, hb.kind, hb.symbol, hb.issued, hb.expires, habStatus(hb).label]))])], { type: 'text/csv' }));
   const xa = $('#x-all', v); if (xa) xa.onclick = () => exportAll($('#x-all-msg', v));
 };

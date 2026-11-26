@@ -1,0 +1,152 @@
+{
+  "at": "2026-11-26T19:44:45.122Z",
+  "base": "https://app--mimouni-industriel-electricite.netlify.app",
+  "results": [
+    {
+      "name": "Connexion admin",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Technicien créé + habilitation qui expire (alerte rouge J-30)",
+      "ok": true,
+      "detail": "Électrique (NF C 18-510)\tB2V BR\t01/03/2024\t16/12/2026\tExpire dans 20 j"
+    },
+    {
+      "name": "Chantier + 3 tâches (10 h, 20 h, 70 h), 2 terminées → avancement 30 %",
+      "ok": true,
+      "detail": "affiché : 30 % | Ⓘ ESTIMATION Fin prévue : 16/12/2026 – Fin estimée : 31/12/2026 (+10 jours ouvrés)"
+    },
+    {
+      "name": "Date de fin libellée « Estimation »",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Planning : double affectation détectée (alerte + case rouge)",
+      "ok": true,
+      "detail": "⚠ Affecté, mais conflit : Déjà affecté ce jour-là (journée)"
+    },
+    {
+      "name": "Équipement créé avec identifiant permanent + QR code",
+      "ok": true,
+      "detail": "EQ-WQMZHC"
+    },
+    {
+      "name": "Étiquette imprimable 50 × 30 mm générée",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "API : technicien ne peut PAS créer d'équipement",
+      "ok": true,
+      "detail": "HTTP 403 Seul l'administrateur crée les fiches matériel et leurs QR codes."
+    },
+    {
+      "name": "API : technicien ne peut PAS supprimer l'historique",
+      "ok": true,
+      "detail": "HTTP 403/403/403"
+    },
+    {
+      "name": "API : technicien ne peut PAS imprimer d'étiquette",
+      "ok": true,
+      "detail": "HTTP 403"
+    },
+    {
+      "name": "API : appel sans connexion refusé",
+      "ok": true,
+      "detail": "HTTP 401"
+    },
+    {
+      "name": "API : chef ne voit pas le chantier d'un autre chef",
+      "ok": true,
+      "detail": "chantiers visibles : TEST Chantier A | accès direct HTTP 403"
+    },
+    {
+      "name": "API : motif maladie invisible pour le chef",
+      "ok": true,
+      "detail": "{\"type\":\"absence\",\"motif\":\"\"}"
+    },
+    {
+      "name": "API : chef ne peut pas créer de compte",
+      "ok": true,
+      "detail": "HTTP 403"
+    },
+    {
+      "name": "Écran chef : seulement ses chantiers",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Écran chef : maladie affichée « Absent », motif masqué",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Scanner : le QR de l'étiquette est lu et ouvre la fiche",
+      "ok": true,
+      "detail": "#/equipement/EQ-WQMZHC"
+    },
+    {
+      "name": "Écran technicien : aucun bouton Modifier / Imprimer / Supprimer",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Écran technicien : pas de bouton « Nouvel équipement »",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Hors ligne : intervention gardée sur l'appareil (« 1 en attente »)",
+      "ok": true,
+      "detail": "1 en attente / Hors ligne"
+    },
+    {
+      "name": "Retour du réseau : confirmation demandée AVANT envoi",
+      "ok": true,
+      "detail": "Connexion rétablie  1 élément en attente (1 intervention, 1 photo). Envoyer maintenant ?  Voir le détail Plus tard Envoy"
+    },
+    {
+      "name": "Photo compressée affichée depuis le serveur",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Après confirmation : intervention + photo envoyées et sauvegardées",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Correction tracée : nouvelle entrée liée, original toujours visible",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Historique : même l'admin ne peut pas effacer (masquage tracé seulement)",
+      "ok": true,
+      "detail": "HTTP 403, entrées : 2"
+    },
+    {
+      "name": "QR scanné sans connexion : « Accès réservé » + nom de l'équipement seulement",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Rapport PDF de chantier généré",
+      "ok": true,
+      "detail": "Rapport-TEST-Chantier-A-2026-11-26.pdf"
+    },
+    {
+      "name": "Export complet ZIP (données + photos)",
+      "ok": true,
+      "detail": "export-mimouni-2026-11-26.zip"
+    },
+    {
+      "name": "Tableau de bord : indicateurs calculés sur les vraies données",
+      "ok": true,
+      "detail": ""
+    }
+  ],
+  "errors": []
+}

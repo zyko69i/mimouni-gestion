@@ -68,7 +68,7 @@ function redactTech(t, user) {
 
 function redactAbsence(a, user) {
   if (user.role === 'admin' || a.techId === user.technicianId) return a;
-  if (a.type === 'maladie') return { ...a, type: 'absence', motif: '', redacted: true };
+  if (a.type === 'maladie') return { ...a, type: 'absence', motif: '', history: [] };
   return a;
 }
 
