@@ -17,7 +17,7 @@ const fmtDT = (s) => (s ? new Date(s).toLocaleString('fr-FR', { day: '2-digit', 
 const daysUntil = (s) => Math.round((parseD(s) - parseD(todayISO())) / 864e5);
 const h = (n) => (Math.round((n || 0) * 10) / 10).toLocaleString('fr-FR') + ' h';
 const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
-const ROLE_LABEL = { admin: 'Administrateur', chef: 'Chef de chantier', technicien: 'Technicien' };
+const ROLE_LABEL = { admin: 'Administrateur', chef: 'Chef d\'équipe', technicien: 'Technicien' };
 const TASK_STATUS = ['À faire', 'En cours', 'Bloquée', 'Terminée', 'Annulée'];
 const ABS_TYPES = ['absence', 'retard', 'congé', 'maladie', 'non-présentation'];
 const HAB_KINDS = ['Électrique (NF C 18-510)', 'CACES', 'AIPR', 'SST', 'Autre'];
@@ -368,26 +368,51 @@ const brandHTML = () => `<div class="brand"><b>MIMOUNI</b> INDUSTRIEL ÉLECTRICI
 function viewLogin(msg = '', equipInfo = null) {
   $('#app').innerHTML = `<div class="login"><div class="box">
     <div class="name"><b>MIMOUNI</b><br>INDUSTRIEL ÉLECTRICITÉ</div>
-    <p class="muted small" style="margin-top:.3rem">Logiciel de gestion – accès réservé au personnel</p>
+    <p class="muted small" style="margin-top:.3rem">Logiciel de gestion</p>
+    <p class="login-intro">Connexion pour l'administrateur, les chefs d'équipe et les techniciens. Utilisez l'identifiant et le mot de passe donnés par l'administrateur.</p>
     ${equipInfo ? `<div class="notice" style="margin:.8rem 0"><b>Accès réservé.</b><br>Équipement : <b>${esc(equipInfo.name)}</b> <span class="muted">(${esc(equipInfo.id)})</span><br>Connectez-vous pour voir la fiche et ajouter une intervention.</div>` : ''}
-    <form id="login-form" style="margin-top:1rem">
-      <label class="f">Identifiant<input name="login" autocomplete="username" autocapitalize="none" required></label>
-      <label class="f">Mot de passe<input name="password" type="password" autocomplete="current-password" required></label>
-      <p class="err" id="login-err">${esc(msg)}</p>
+    <form id="login-form" novalidate style="margin-top:.6rem">
+      <label class="f">Identifiant<input name="login" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="ex. : admin, prenom.nom"></label>
+      <label class="f">Mot de passe<span class="pw-wrap"><input name="password" type="password" autocomplete="current-password"><button type="button" class="pw-eye" id="pw-eye" aria-label="Afficher le mot de passe" aria-pressed="false">${EYE_OPEN}</button></span></label>
+      <p class="err" id="login-err" role="alert">${esc(msg)}</p>
       <button class="btn primary bigbtn" type="submit">Se connecter</button>
     </form>
-    <p class="muted small" style="margin-top:1rem">Mot de passe oublié : demandez à l'administrateur de le réinitialiser.</p>
+    <p class="login-forgot">Mot de passe oublié ? Demandez à l'administrateur.</p>
   </div></div>`;
-  $('#login-form').onsubmit = async (e) => {
+  const f = $('#login-form');
+  $('#pw-eye').onclick = () => {
+    const show = f.password.type === 'password';
+    f.password.type = show ? 'text' : 'password';
+    const b = $('#pw-eye'); b.innerHTML = show ? EYE_SHUT : EYE_OPEN;
+    b.setAttribute('aria-label', show ? 'Masquer le mot de passe' : 'Afficher le mot de passe'); b.setAttribute('aria-pressed', String(show));
+    f.password.focus();
+  };
+  f.oninput = () => { $('#login-err').textContent = ''; };
+  f.onsubmit = async (e) => {
     e.preventDefault();
-    const f = e.target; const btn = f.querySelector('button'); btn.disabled = true;
+    const err = $('#login-err'); const btn = f.querySelector('button[type=submit]');
+    const login = f.login.value.trim(); const pw = f.password.value;
+    if (!login && !pw) { err.textContent = 'Entrez votre identifiant et votre mot de passe.'; f.login.focus(); return; }
+    if (!login) { err.textContent = 'Entrez votre identifiant.'; f.login.focus(); return; }
+    if (!pw) { err.textContent = 'Entrez votre mot de passe.'; f.password.focus(); return; }
+    if (!navigator.onLine) { err.textContent = 'Pas de connexion internet. Connectez-vous au réseau puis réessayez.'; return; }
+    btn.disabled = true; btn.textContent = 'Connexion…';
     try {
-      const r = await api('POST', 'login', { login: f.login.value.trim(), password: f.password.value });
+      const r = await api('POST', 'login', { login, password: pw });
       S.token = r.token; localStorage.setItem('mimouni_token', r.token);
       await start();
-    } catch (err) { $('#login-err').textContent = err.message; btn.disabled = false; }
+    } catch (ex) {
+      const m = String(ex && ex.message || '');
+      err.textContent = /incorrect/i.test(m) ? 'Identifiant ou mot de passe incorrect. Vérifiez les majuscules, ou demandez à l\'administrateur.'
+        : /tentatives/i.test(m) ? m
+        : /réseau|connexion|fetch|hors ligne/i.test(m) ? 'Le serveur ne répond pas. Vérifiez votre connexion internet puis réessayez.'
+        : (m || 'Connexion impossible. Réessayez.');
+      btn.disabled = false; btn.textContent = 'Se connecter';
+    }
   };
 }
+const EYE_OPEN = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg>';
+const EYE_SHUT = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M17.9 17.9A10.4 10.4 0 0 1 12 19c-7 0-11-7-11-7a19 19 0 0 1 5.1-5.9M9.9 5.2A9.6 9.6 0 0 1 12 5c7 0 11 7 11 7a19 19 0 0 1-2.2 3.2M14.1 14.1a3 3 0 1 1-4.2-4.2"/><path d="M1 1l22 22"/></svg>';
 async function logout(expired) {
   S.token = ''; S.me = null; S.data = null; localStorage.removeItem('mimouni_token');
   await idb.del('bootstrap').catch(() => {});
@@ -418,6 +443,7 @@ function renderShell() {
   <header class="topbar">${brandHTML()}
     <div class="status"><span class="dot" id="net-dot" title="Connexion"></span><span id="net-label" class="small"></span><span class="badge-sync" id="sync-badge">Sauvegardé</span></div>
   </header>
+  <div class="whois" id="whois"><span>Connecté : <b>${esc(S.me.name)}</b> — ${esc(ROLE_LABEL[S.me.role])}</span><button class="btn sm whois-out" id="logout-top" type="button">Déconnexion</button></div>
   <div class="layout">
     <nav class="side">${navItems().map(([href, ic, lab]) => `<a href="${href}" data-nav="${href}">${ICON[ic]}<span>${esc(lab)}</span></a>`).join('')}
       <div class="sep"></div><div class="small" style="padding:.3rem .7rem;color:#aaa">${esc(S.me.name)}<br>${esc(ROLE_LABEL[S.me.role])}</div>
@@ -432,6 +458,7 @@ function renderShell() {
     <a href="#/plus" data-nav="#/plus">${ICON.more}<span>Plus</span></a>
   </nav>`;
   $('#logout-side').onclick = (e) => { e.preventDefault(); logout(); };
+  $('#logout-top').onclick = () => logout();
   $('#sync-badge').onclick = () => { if ((S.rejected || []).length) { location.hash = '#/envois'; return; } if (S.queue.length) { if (navigator.onLine) proposeSync(); else toast(queueSummary(S.queue) + ' – envoi au retour du réseau.'); } else toast(S.lastSync ? 'Données à jour (' + fmtDT(S.lastSync) + ')' : 'Données à jour'); };
   paintStatus();
 }

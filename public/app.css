@@ -203,3 +203,16 @@ tr.click{cursor:pointer} tr.click:hover{background:#fafafa}
 }
 
 .ts-line b,.ts-total b{white-space:nowrap}
+
+/* Connexion : texte d'accueil, œil du mot de passe, bandeau « Connecté » */
+.login-intro{margin:.8rem 0 0;padding:.6rem .75rem;background:#f6f6f6;border-left:4px solid var(--rouge);border-radius:6px;font-size:.92rem;line-height:1.4;color:#222}
+.login-forgot{margin-top:1rem;font-size:.9rem;color:#444;font-weight:600}
+.pw-wrap{position:relative;display:block}
+.pw-wrap input{padding-right:3rem;width:100%}
+.pw-eye{position:absolute;right:.25rem;top:50%;transform:translateY(-50%);background:none;border:0;padding:.45rem;color:#333;cursor:pointer;line-height:0;border-radius:8px}
+.pw-eye:hover,.pw-eye[aria-pressed="true"]{color:var(--rouge)}
+.login .err{font-weight:600}
+.whois{position:sticky;top:calc(var(--top-h) + env(safe-area-inset-top));z-index:30;display:flex;align-items:center;justify-content:space-between;gap:.6rem;background:var(--rouge);color:#fff;padding:.45rem .9rem;font-size:.95rem}
+.whois b{font-weight:800}
+.whois span{min-width:0;overflow-wrap:anywhere}
+.whois .whois-out{background:#fff;color:var(--noir);border:0;font-weight:700;white-space:nowrap;flex:none}
