@@ -853,7 +853,7 @@ ROUTES.absences = async (v) => {
 
 // ---------------- Matériel et QR codes ----------------
 // Lien permanent imprimé sur les étiquettes : toujours l'adresse définitive du site
-const CANONICAL = 'https://mimouni-industriel-electricite.netlify.app';
+const CANONICAL = 'https://mimouni-industriel-electricite.vercel.app';
 const equipURL = (id) => CANONICAL + '/e/' + id;
 function qrSVG(text, cell = 4) { const q = qrcode(0, 'M'); q.addData(text); q.make(); return q.createSvgTag({ cellSize: cell, margin: 2, scalable: true }); }
 function labelHTML(e) {

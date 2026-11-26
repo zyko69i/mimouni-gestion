@@ -7,6 +7,7 @@
 // Aucun gros fichier JSON partagé n'est jamais réécrit.
 
 import { getStore } from '@netlify/blobs';
+import { vercelStore } from './store-vercel.mjs';
 
 const STORE = 'mimouni';
 
@@ -14,7 +15,10 @@ const STORE = 'mimouni';
 // Netlify Blobs fourni à chaque requête expire. Un store mémorisé dans une
 // fonction restée « chaude » provoquait « Token expired » puis « Erreur serveur »
 // sur toutes les requêtes (connexion comprise) au bout de quelques dizaines de minutes.
+// Hébergeur choisi selon l'environnement : Vercel Blob si BLOB_READ_WRITE_TOKEN existe,
+// sinon Netlify Blobs (le code Netlify reste inchangé).
 function store() {
+  if (process.env.BLOB_READ_WRITE_TOKEN) return vercelStore();
   return getStore({ name: STORE, consistency: 'strong' });
 }
 

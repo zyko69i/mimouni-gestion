@@ -5,6 +5,7 @@
   "type": "module",
   "description": "Logiciel de gestion MIMOUNI INDUSTRIEL ÉLECTRICITÉ (chantiers, techniciens, planning, matériel, QR codes)",
   "dependencies": {
-    "@netlify/blobs": "^11.1.12"
+    "@netlify/blobs": "^11.1.12",
+    "@vercel/blob": "^2.9.0"
   }
 }
