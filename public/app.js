@@ -188,7 +188,7 @@ function formModal({ title, fields, submitLabel = 'Enregistrer', onSubmit, intro
     if (f.type === 'textarea') return `<label class="f">${esc(f.label)}<textarea name="${f.name}" ${req} placeholder="${esc(f.placeholder || '')}">${esc(v)}</textarea></label>`;
     if (f.type === 'checks') return `<div class="f"><b class="small">${esc(f.label)}</b><div class="checks">${f.options.map(([val, lab]) => `<label><input type="checkbox" name="${f.name}" value="${esc(val)}" ${(v || []).includes(val) ? 'checked' : ''}> ${esc(lab)}</label>`).join('') || '<span class="muted">Aucun</span>'}</div></div>`;
     if (f.type === 'photos') return `<label class="f">${esc(f.label)}<input type="file" name="${f.name}" accept="image/*" multiple ${f.capture ? 'capture="environment"' : ''}></label>`;
-    return `<label class="f">${esc(f.label)}<input type="${f.type || 'text'}" name="${f.name}" value="${esc(v)}" ${req} ${f.step ? `step="${f.step}"` : ''} ${f.min !== undefined ? `min="${f.min}"` : ''} ${f.max !== undefined ? `max="${f.max}"` : ''} placeholder="${esc(f.placeholder || '')}" ${f.autocomplete ? `autocomplete="${f.autocomplete}"` : ''}></label>`;
+    return `<label class="f">${esc(f.label)}<input type="${f.type || 'text'}" name="${f.name}" value="${esc(v)}" ${req} ${f.step ? `step="${f.step}"` : ''} ${f.min !== undefined ? `min="${f.min}"` : ''} ${f.max !== undefined ? `max="${f.max}"` : ''} placeholder="${esc(f.placeholder || '')}" ${f.autocomplete ? `autocomplete="${f.autocomplete}"` : ''} ${f.maxlength ? `maxlength="${f.maxlength}"` : ''}></label>`;
   }).join('');
   modal(`<h2>${esc(title)}</h2>${intro}<form>${fh}<p class="err" data-err></p><div class="actions"><button type="button" class="btn" data-a="c">Annuler</button><button class="btn primary" type="submit">${esc(submitLabel)}</button></div></form>`,
     (root, close) => {
@@ -572,7 +572,7 @@ function chantierForm(c = null) {
   formModal({
     title: c ? 'Modifier le chantier' : 'Nouveau chantier',
     fields: [
-      { name: 'name', label: 'Nom du chantier', required: true, value: c?.name },
+      { name: 'name', label: 'Nom du chantier', required: true, value: c?.name, maxlength: 120 },
       { name: 'client', label: 'Client', value: c?.client },
       { name: 'address', label: 'Adresse', value: c?.address },
       { name: 'chefId', label: 'Chef de chantier responsable', type: 'select', options: [['', '– Aucun –'], ...chefs.map((u) => [u.login, u.name + ' (' + ROLE_LABEL[u.role] + ')'])], value: c?.chefId },
@@ -646,7 +646,7 @@ ROUTES.chantier = async (v, id) => {
 
 function taskForm(c) {
   formModal({ title: 'Nouvelle tâche', fields: [
-    { name: 'title', label: 'Titre', required: true },
+    { name: 'title', label: 'Titre', required: true, maxlength: 200 },
     { name: 'plannedHours', label: 'Heures prévues', type: 'number', step: '0.5', min: '0', max: '10000', required: true },
     { name: 'start', label: 'Début', type: 'date' }, { name: 'end', label: 'Échéance', type: 'date' },
     { name: 'assignee', label: 'Affectée à', type: 'select', options: [['', '– Personne –'], ...(c.team || []).map((t) => [t, techName(t)])] },
@@ -708,9 +708,12 @@ ROUTES.planning = async (v) => {
     <div class="row">${['day', 'week', 'month'].map((m) => `<button class="btn sm ${PL.mode === m ? 'dark' : ''}" data-mode="${m}">${{ day: 'Jour', week: 'Semaine', month: 'Mois' }[m]}</button>`).join('')}</div>
     <div class="row"><button class="btn sm" data-nav-d="-1">‹</button><b>${esc(title)}</b><button class="btn sm" data-nav-d="1">›</button><button class="btn sm" data-today>Aujourd'hui</button></div></div>
     ${conflicts.length ? `<p class="err small" id="conflict-list">⚠ ${conflicts.length} conflit(s) : ${conflicts.map((x) => esc(techName(x.a.techId) + ' le ' + fmtD(x.a.date) + ' – ' + x.c.join(', '))).join(' · ')}</p>` : '<p class="muted small">Aucun conflit sur la période.</p>'}
-    <div class="table-wrap"><table class="plan ${PL.mode === 'month' ? 'month' : ''}"><thead><tr><th class="tech">Technicien</th>${days.map((d) => `<th class="${!isWorkDay(d) ? 'we' : ''}">${PL.mode === 'month' ? parseD(d).getDate() : parseD(d).toLocaleDateString('fr-FR', { weekday: 'short', day: '2-digit', month: '2-digit' })}</th>`).join('')}</tr></thead>
+    <div class="table-wrap"><table class="plan ${PL.mode === 'month' ? 'month' : ''}"><thead><tr><th class="tech">Technicien</th>${days.map((d) => `<th data-d="${d}" class="${!isWorkDay(d) ? 'we' : ''}">${PL.mode === 'month' ? parseD(d).getDate() : parseD(d).toLocaleDateString('fr-FR', { weekday: 'short', day: '2-digit', month: '2-digit' })}</th>`).join('')}</tr></thead>
     <tbody>${techs.map((t) => `<tr><td class="tech">${esc(t.firstName + ' ' + t.lastName)}${demoTag(t)}</td>${days.map((d) => cell(t, d)).join('')}</tr>`).join('') || `<tr><td class="muted" colspan="${days.length + 1}">Aucun technicien.</td></tr>`}</tbody></table></div>
     <p class="muted small">Rouge = conflit (double affectation, absence ou habilitation expirée). ${canEdit ? 'Touchez une affectation pour la retirer.' : ''}</p></div>`;
+  // Sur téléphone, la semaine ne tient pas en largeur : on fait défiler jusqu'au jour d'aujourd'hui
+  { const wrap = $('.table-wrap', v); const target = days.includes(todayISO()) ? todayISO() : PL.anchor; const th = wrap && wrap.querySelector(`th[data-d="${target}"]`);
+    if (wrap && th && wrap.scrollWidth > wrap.clientWidth) { const first = wrap.querySelector('th.tech'); wrap.scrollLeft = Math.max(0, th.offsetLeft - (first ? first.offsetWidth : 0)); } }
   $$('[data-mode]', v).forEach((b) => (b.onclick = () => { PL.mode = b.dataset.mode; render(); }));
   $$('[data-nav-d]', v).forEach((b) => (b.onclick = () => { const k = Number(b.dataset.navD); if (PL.mode === 'day') PL.anchor = addDays(PL.anchor, k); else if (PL.mode === 'week') PL.anchor = addDays(PL.anchor, 7 * k); else { const d = parseD(PL.anchor); PL.anchor = iso(new Date(d.getFullYear(), d.getMonth() + k, 1)); } render(); }));
   $('[data-today]', v).onclick = () => { PL.anchor = todayISO(); render(); };
@@ -838,7 +841,7 @@ ROUTES.materiel = async (v) => {
 };
 function equipForm(e = null) {
   formModal({ title: e ? 'Modifier l\'équipement' : 'Nouvel équipement', intro: e ? '' : '<p class="muted small">Un identifiant permanent et son QR code seront créés automatiquement (jamais réutilisés).</p>', fields: [
-    { name: 'name', label: 'Désignation', required: true, value: e?.name },
+    { name: 'name', label: 'Désignation', required: true, value: e?.name, maxlength: 150 },
     { name: 'type', label: 'Type', type: 'select', options: ['Armoire', 'TGBT', 'Tableau divisionnaire', 'Variateur', 'Moteur', 'Disjoncteur', 'Transformateur', 'Automate', 'Éclairage', 'Autre'], value: e?.type },
     { name: 'brand', label: 'Marque', value: e?.brand }, { name: 'model', label: 'Modèle', value: e?.model }, { name: 'serial', label: 'N° de série', value: e?.serial },
     { name: 'chantierId', label: 'Chantier / site', type: 'select', options: [['', '–'], ...D().chantiers.map((c) => [c.id, c.name])], value: e?.chantierId },
@@ -1025,7 +1028,11 @@ async function chantierPDF(c) {
   const interv = [];
   for (const e of equip) { try { (await api('GET', `equipment/${e.id}/history`)).forEach((x) => interv.push({ ...x, eq: e.name })); } catch { /* hors ligne */ } }
   section('Interventions sur le matériel');
-  if (interv.length) table([{ t: 'Date', w: 30 }, { t: 'Équipement', w: 40 }, { t: 'Type', w: 22 }, { t: 'Détail', w: 68 }, { t: 'Auteur', w: 20 }], interv.sort((a, b) => a.at.localeCompare(b.at)).map((x) => [fmtDT(x.at), x.eq, x.type, x.content + (x.reason ? ' (motif : ' + x.reason + ')' : ''), x.authorName || x.author]));
+  // Les entrées masquées par l'administrateur (et les lignes de masquage) ne sortent pas dans le rapport remis au client
+  const masked = new Set(interv.filter((x) => x.type === 'masquage').map((x) => x.correctsId));
+  const shown = interv.filter((x) => x.type !== 'masquage' && !masked.has(x.id));
+  const TYPE_FR = { intervention: 'Intervention', remarque: 'Remarque', photo: 'Photo', correction: 'Correction' };
+  if (shown.length) table([{ t: 'Date', w: 28 }, { t: 'Équipement', w: 36 }, { t: 'Type', w: 22 }, { t: 'Détail', w: 62 }, { t: 'Auteur', w: 32 }], shown.sort((a, b) => a.at.localeCompare(b.at)).map((x) => [fmtDT(x.at), x.eq, TYPE_FR[x.type] || x.type, x.content + (x.reason ? ' (motif : ' + x.reason + ')' : ''), x.authorName || x.author]));
   else kv('', 'Aucune intervention enregistrée.');
   need(30); y += 4; doc.setFont('helvetica', 'bold'); doc.setFontSize(9.5); doc.text('Visa du responsable', M, y); doc.text('Visa du client', W / 2 + 5, y); doc.setDrawColor(138, 141, 145); doc.rect(M, y + 2, W / 2 - M - 5, 20); doc.rect(W / 2 + 5, y + 2, W / 2 - M - 5, 20);
   const pages = doc.getNumberOfPages();
