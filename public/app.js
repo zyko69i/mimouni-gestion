@@ -188,7 +188,7 @@ function formModal({ title, fields, submitLabel = 'Enregistrer', onSubmit, intro
     if (f.type === 'textarea') return `<label class="f">${esc(f.label)}<textarea name="${f.name}" ${req} placeholder="${esc(f.placeholder || '')}">${esc(v)}</textarea></label>`;
     if (f.type === 'checks') return `<div class="f"><b class="small">${esc(f.label)}</b><div class="checks">${f.options.map(([val, lab]) => `<label><input type="checkbox" name="${f.name}" value="${esc(val)}" ${(v || []).includes(val) ? 'checked' : ''}> ${esc(lab)}</label>`).join('') || '<span class="muted">Aucun</span>'}</div></div>`;
     if (f.type === 'photos') return `<label class="f">${esc(f.label)}<input type="file" name="${f.name}" accept="image/*" multiple ${f.capture ? 'capture="environment"' : ''}></label>`;
-    return `<label class="f">${esc(f.label)}<input type="${f.type || 'text'}" name="${f.name}" value="${esc(v)}" ${req} ${f.step ? `step="${f.step}"` : ''} placeholder="${esc(f.placeholder || '')}" ${f.autocomplete ? `autocomplete="${f.autocomplete}"` : ''}></label>`;
+    return `<label class="f">${esc(f.label)}<input type="${f.type || 'text'}" name="${f.name}" value="${esc(v)}" ${req} ${f.step ? `step="${f.step}"` : ''} ${f.min !== undefined ? `min="${f.min}"` : ''} ${f.max !== undefined ? `max="${f.max}"` : ''} placeholder="${esc(f.placeholder || '')}" ${f.autocomplete ? `autocomplete="${f.autocomplete}"` : ''}></label>`;
   }).join('');
   modal(`<h2>${esc(title)}</h2>${intro}<form>${fh}<p class="err" data-err></p><div class="actions"><button type="button" class="btn" data-a="c">Annuler</button><button class="btn primary" type="submit">${esc(submitLabel)}</button></div></form>`,
     (root, close) => {
@@ -647,7 +647,7 @@ ROUTES.chantier = async (v, id) => {
 function taskForm(c) {
   formModal({ title: 'Nouvelle tâche', fields: [
     { name: 'title', label: 'Titre', required: true },
-    { name: 'plannedHours', label: 'Heures prévues', type: 'number', step: '0.5', required: true },
+    { name: 'plannedHours', label: 'Heures prévues', type: 'number', step: '0.5', min: '0', max: '10000', required: true },
     { name: 'start', label: 'Début', type: 'date' }, { name: 'end', label: 'Échéance', type: 'date' },
     { name: 'assignee', label: 'Affectée à', type: 'select', options: [['', '– Personne –'], ...(c.team || []).map((t) => [t, techName(t)])] },
     { name: 'requiredHab', label: 'Habilitation requise (ex. B2V)' },
@@ -657,10 +657,10 @@ function taskUpdate(t, c) {
   const statuses = isAdmin() ? TASK_STATUS : TASK_STATUS.filter((s) => s !== 'Annulée');
   const fields = [
     { name: 'status', label: 'Statut', type: 'select', options: statuses, value: t.status },
-    { name: 'doneHours', label: 'Heures réalisées (cumul)', type: 'number', step: '0.5', value: t.doneHours },
+    { name: 'doneHours', label: 'Heures réalisées (cumul)', type: 'number', step: '0.5', min: '0', max: '10000', value: t.doneHours },
     { name: 'blockReason', label: 'Motif de blocage (obligatoire si « Bloquée »)', value: t.blockReason, placeholder: 'attente matériel, attente client, consignation…' },
   ];
-  if (!isTech()) fields.push({ name: 'plannedHours', label: 'Heures prévues', type: 'number', step: '0.5', value: t.plannedHours }, { name: 'end', label: 'Échéance', type: 'date', value: t.end }, { name: 'assignee', label: 'Affectée à', type: 'select', options: [['', '– Personne –'], ...(c.team || []).map((x) => [x, techName(x)])], value: t.assignee });
+  if (!isTech()) fields.push({ name: 'plannedHours', label: 'Heures prévues', type: 'number', step: '0.5', min: '0', max: '10000', value: t.plannedHours }, { name: 'end', label: 'Échéance', type: 'date', value: t.end }, { name: 'assignee', label: 'Affectée à', type: 'select', options: [['', '– Personne –'], ...(c.team || []).map((x) => [x, techName(x)])], value: t.assignee });
   formModal({ title: t.title, fields, onSubmit: async (vals) => {
     const r = await api('PUT', 'tasks/' + t.id, { ...vals, baseUpdatedAt: t.updatedAt }, { queueable: true, kind: 'tâche', label: 'Tâche « ' + t.title + ' » : ' + vals.status });
     if (r.queued) { toast('Hors ligne : modification enregistrée sur l\'appareil.'); return; }
@@ -896,7 +896,7 @@ ROUTES.equipement = async (v, id) => {
   on('#add-int', () => formModal({ title: 'Nouvelle saisie – ' + e.name, fields: [
     { name: 'type', label: 'Type', type: 'select', options: [['intervention', 'Intervention'], ['remarque', 'Remarque'], ['photo', 'Photos']] },
     { name: 'content', label: 'Description', type: 'textarea', placeholder: 'Ce qui a été fait, constaté, mesuré…' },
-    { name: 'duration', label: 'Durée (heures)', type: 'number', step: '0.25' },
+    { name: 'duration', label: 'Durée (heures)', type: 'number', step: '0.25', min: '0', max: '10000' },
     { name: 'photos', label: 'Photos (compressées automatiquement)', type: 'photos', capture: true },
   ], onSubmit: async (vals) => {
     if (!vals.content && !vals.photos.length) throw new Error('Ajoutez une description ou une photo.');

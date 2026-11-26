@@ -162,6 +162,7 @@ tr.click{cursor:pointer} tr.click:hover{background:#fafafa}
 .label .nm{font-size:6.5pt;font-weight:700;line-height:1.15;max-height:3.4em;overflow:hidden}
 .label .cd{font-size:8pt;font-weight:900;font-family:"Courier New",monospace}
 .label-preview{transform:scale(2.2);transform-origin:top left;margin-bottom:calc(30mm * 1.2 + 10px);width:50mm}
+@media (max-width:600px){.label-preview{transform:scale(1.6);margin-bottom:calc(30mm * .6 + 10px)}}
 #print-area{display:none}
 @media print{
   @page{size:50mm 30mm;margin:0}
