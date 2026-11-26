@@ -20,7 +20,7 @@ function store() {
 
 export const COLLECTIONS = [
   'users', 'technicians', 'chantiers', 'tasks', 'assignments',
-  'absences', 'equipment', 'settings',
+  'absences', 'equipment', 'settings', 'timesheets',
 ];
 
 const safe = (s) => String(s).replace(/[^A-Za-z0-9_.-]/g, '');
@@ -38,6 +38,9 @@ export async function remove(coll, id) {
   // Utilisé uniquement pour les données d'exemple et les sessions de test.
   await store().delete(`${coll}/${safe(id)}`);
 }
+
+export async function keysOf(prefix) { return listKeys(prefix); }
+export const histKey = (entry) => `hist/${safe(entry.equipId)}/${stamp(entry.at)}-${safe(entry.id)}`;
 
 async function listKeys(prefix) {
   const keys = [];
@@ -66,7 +69,7 @@ export async function list(coll) {
 const stamp = (iso) => iso.replace(/[-:.TZ]/g, '');
 
 export async function appendHistory(equipId, entry) {
-  const key = `hist/${safe(equipId)}/${stamp(entry.at)}-${safe(entry.id)}`;
+  const key = histKey({ ...entry, equipId });
   // onlyIfNew : une entrée existante ne peut jamais être réécrite.
   await store().setJSON(key, entry, { onlyIfNew: true });
   return entry;

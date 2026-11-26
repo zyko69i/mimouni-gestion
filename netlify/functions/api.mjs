@@ -136,11 +136,13 @@ async function bootstrap(user) {
     equipFilter.clear(); allowedEq.forEach((i) => equipFilter.add(i)); [...sc.chantierIds].forEach((id) => equipFilter.add('CH-' + id));
   }
   const recent = await db.recentHistory(15, equipFilter);
+  const sheetsFrom = new Date(Date.now() - 120 * 864e5).toISOString().slice(0, 10);
+  const timesheets = (await db.list('timesheets')).filter((f) => f.date >= sheetsFrom && canSeeSheet(f, user, sc));
   const out = {
     me: publicUser(user), company: company || { name: COMPANY }, serverTime: now(),
     chantiers: visChantiers, tasks: visTasks, technicians: visTechs, assignments: visAssign,
     // Le chef ne voit que le matériel de ses chantiers (et le matériel sans chantier)
-    absences: visAbs, equipment: user.role === 'chef' ? equipment.filter((e) => !e.chantierId || sc.chantierIds.has(e.chantierId)) : equipment, recent,
+    timesheets, absences: visAbs, equipment: user.role === 'chef' ? equipment.filter((e) => !e.chantierId || sc.chantierIds.has(e.chantierId)) : equipment, recent,
   };
   if (user.role === 'admin') out.users = (await db.list('users')).map(publicUser);
   else out.users = (await db.list('users')).filter((u) => u.role !== 'technicien' || sc.techIds.has(u.technicianId)).map((u) => ({ login: u.login, name: u.name, role: u.role, technicianId: u.technicianId || '' }));
@@ -175,6 +177,64 @@ async function conflictsFor(a) {
     .forEach(() => out.push({ kind: 'absence', message: 'Absence signalée ce jour-là' }));
   (tech?.habilitations || []).forEach((h) => { if (h.expires && h.expires < a.date && !(tech.habilitations || []).some((o) => o.kind === h.kind && o.symbol === h.symbol && o.expires >= a.date)) out.push({ kind: 'habilitation', message: 'Habilitation ' + (h.symbol || h.kind) + ' expirée' }); });
   return out;
+}
+
+// ---------- Pointage (feuilles d'heures) ----------
+const TS_STATUS = ['Envoyée', 'Validée', 'Refusée'];
+const parisToday = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Paris' });
+function canSeeSheet(f, user, sc) {
+  if (user.role === 'admin') return true;
+  if (f.techId && f.techId === user.technicianId) return true;
+  if (user.role === 'chef') return (f.lines || []).some((l) => sc.chantierIds.has(l.chantierId));
+  return false;
+}
+// Le chef valide seulement si TOUTES les lignes sont sur SES chantiers, et jamais sa propre feuille
+function canDecideSheet(f, user, chantiers) {
+  if (user.role === 'admin') return '';
+  if (user.role !== 'chef') return 'Seul le chef de chantier ou l\'administrateur valide les heures.';
+  if (f.techId && f.techId === user.technicianId) return 'Vous ne pouvez pas valider votre propre feuille d\'heures.';
+  const mine = (l) => { const c = chantiers.find((x) => x.id === l.chantierId); return c && c.chefId === user.login; };
+  if (!(f.lines || []).every(mine)) return 'Cette feuille contient des heures sur un chantier qui n\'est pas le vôtre : l\'administrateur la valide.';
+  return '';
+}
+// Ajoute (+1) ou retire (-1) les heures d'une feuille validée aux heures réalisées
+async function applySheet(f, sign) {
+  const byTask = {}, byCh = {};
+  for (const l of f.lines || []) { if (l.taskId) byTask[l.taskId] = (byTask[l.taskId] || 0) + l.hours; else byCh[l.chantierId] = (byCh[l.chantierId] || 0) + l.hours; }
+  const r2 = (n) => Math.max(0, Math.round(n * 100) / 100);
+  for (const [id, hrs] of Object.entries(byTask)) { const t = await db.get('tasks', id); if (t) { t.tsHours = r2((t.tsHours || 0) + sign * hrs); await db.put('tasks', id, t); } }
+  for (const [id, hrs] of Object.entries(byCh)) { const c = await db.get('chantiers', id); if (c) { c.tsOther = r2((c.tsOther || 0) + sign * hrs); await db.put('chantiers', id, c); } }
+}
+async function checkSheetBody(b, user, sc, techId) {
+  const d = date(b.date);
+  if (!d) return { err: 'La date est obligatoire.' };
+  if (d > parisToday()) return { err: 'On ne peut pas pointer un jour qui n\'est pas encore passé.' };
+  if (user.role === 'technicien' && d < new Date(Date.now() - 31 * 864e5).toISOString().slice(0, 10)) return { err: 'Ce jour date de plus d\'un mois : demandez à l\'administrateur.' };
+  if (!Array.isArray(b.lines) || !b.lines.length) return { err: 'Ajoutez au moins une ligne (chantier et heures).' };
+  if (b.lines.length > 12) return { err: '12 lignes maximum par jour.' };
+  const tasks = await db.list('tasks');
+  const lines = []; const seen = new Set(); let total = 0;
+  for (const [i, l] of b.lines.entries()) {
+    const n = 'Ligne ' + (i + 1) + ' : ';
+    const chantierId = str(l.chantierId, 20); const taskId = str(l.taskId, 20);
+    if (!chantierId) return { err: n + 'choisissez un chantier.' };
+    const ch = sc.chantiers.find((c) => c.id === chantierId);
+    if (!ch) return { err: n + 'chantier introuvable.' };
+    if (user.role !== 'admin' && !sc.chantierIds.has(chantierId)) return { err: n + 'ce chantier ne fait pas partie de vos chantiers.' };
+    if (ch.status === 'Clôturé') return { err: n + 'ce chantier est clôturé.' };
+    if (taskId) { const t = tasks.find((x) => x.id === taskId); if (!t || t.chantierId !== chantierId) return { err: n + 'la tâche ne correspond pas au chantier.' }; if (t.status === 'Annulée') return { err: n + 'cette tâche est annulée.' }; }
+    const hv = Number(l.hours);
+    if (!Number.isFinite(hv) || hv <= 0) return { err: n + 'indiquez un nombre d\'heures supérieur à 0.' };
+    if (hv > 24) return { err: n + '24 h maximum.' };
+    const k = chantierId + '|' + taskId; if (seen.has(k)) return { err: n + 'même chantier et même tâche déjà saisis sur une autre ligne.' }; seen.add(k);
+    total += hv; lines.push({ chantierId, taskId, hours: Math.round(hv * 100) / 100, note: str(l.note, 300) });
+  }
+  if (total > 24) return { err: 'Total de la journée : ' + total + ' h. 24 h maximum.' };
+  const warnings = [];
+  const abs = (await db.list('absences')).find((a) => a.techId === techId && a.type !== 'retard' && a.status !== 'Refusée' && a.start <= d && (a.end || a.start) >= d);
+  if (abs) warnings.push('Une absence est enregistrée ce jour-là.');
+  if (total > 10) warnings.push('Plus de 10 h dans la journée.');
+  return { d, lines, total: Math.round(total * 100) / 100, warnings };
 }
 
 // ---------- Données d'exemple ----------
@@ -326,6 +386,7 @@ async function route(req) {
     if (r1 && !sc.chantierIds.has(r1)) return deny('Ce chantier ne fait pas partie de vos chantiers.');
     if (m === 'PUT' && r1 && !r2) {
       const c = await db.get('chantiers', r1); if (!c) return notFound();
+      const prevStatus = c.status;
       if (isAdmin) {
         for (const k of ['name', 'address', 'client', 'chefId', 'description']) if (body[k] !== undefined) c[k] = str(body[k], k === 'description' ? 2000 : 250);
         for (const k of ['start', 'endPlanned']) if (body[k] !== undefined) c[k] = date(body[k]);
@@ -339,6 +400,12 @@ async function route(req) {
         else if (Array.isArray(body.team)) c.team = body.team.map((x) => str(x, 20));
         else return deny('Seul l\'administrateur modifie les informations principales du chantier.');
       } else return deny();
+      if (c.status !== prevStatus && ['Clôture proposée', 'Clôturé'].includes(c.status)) {
+        const open = (await db.list('tasks')).filter((t) => t.chantierId === c.id && ['À faire', 'En cours', 'Bloquée'].includes(t.status));
+        if (open.length) return bad('Clôture impossible : ' + open.length + ' tâche' + (open.length > 1 ? 's' : '') + ' encore à faire, en cours ou bloquée' + (open.length > 1 ? 's' : '') + ' (' + open.slice(0, 3).map((t) => '« ' + t.title + ' »').join(', ') + (open.length > 3 ? '…' : '') + '). Terminez-les ou demandez à l\'administrateur de les annuler.');
+        const waiting = (await db.list('timesheets')).filter((f) => f.status === 'Envoyée' && (f.lines || []).some((l) => l.chantierId === c.id));
+        if (waiting.length) return bad('Clôture impossible : ' + waiting.length + ' feuille' + (waiting.length > 1 ? 's' : '') + ' d\'heures à valider sur ce chantier.');
+      }
       c.updatedAt = now();
       await db.put('chantiers', c.id, c);
       await log(user, 'chantier modifié', 'chantier', c.id, body.status || '');
@@ -387,7 +454,10 @@ async function route(req) {
         t.status = body.status;
       }
       if (body.blockReason !== undefined) t.blockReason = str(body.blockReason, 300);
-      if (body.doneHours !== undefined) t.doneHours = num(body.doneHours);
+      if (body.doneHours !== undefined && Number(body.doneHours) !== Number(t.doneHours || 0)) {
+        if (isTech) return deny('Les heures se déclarent dans votre feuille d\'heures (menu « Mes heures »), validée par le chef.');
+        t.doneHours = num(body.doneHours);
+      }
       if (!isTech) {
         for (const k of ['title']) if (body[k] !== undefined) t[k] = str(body[k], 200);
         if (body.plannedHours !== undefined) t.plannedHours = num(body.plannedHours);
@@ -552,6 +622,54 @@ async function route(req) {
     return ok({ id: r1, dataUrl: p });
   }
 
+  // ----- Pointage : feuilles d'heures -----
+  if (r0 === 'timesheets') {
+    const sc = await scope(user);
+    if (m === 'POST' && !r1) {
+      let techId = str(body.techId, 20);
+      if (user.role === 'technicien') { techId = user.technicianId; if (!techId) return bad('Votre compte n\'est relié à aucune fiche technicien.'); }
+      else if (user.role === 'chef') { if (!user.technicianId || techId !== user.technicianId) return deny('Le chef valide les feuilles ; seul le technicien (ou l\'administrateur) les remplit.'); }
+      else if (!techId || !(await db.get('technicians', techId))) return bad('Choisissez le technicien.');
+      const chk = await checkSheetBody(body, user, sc, techId);
+      if (chk.err) return bad(chk.err);
+      const id = 'F-' + techId + '-' + chk.d;
+      const prev = await db.get('timesheets', id);
+      const clientId = str(body.clientId, 40);
+      if (prev && clientId && prev.clientId === clientId) return ok({ ...prev, duplicate: true });
+      if (prev && prev.status === 'Validée' && !isAdmin) return bad('La feuille du ' + chk.d.split('-').reverse().join('/') + ' est déjà validée : demandez une correction à l\'administrateur.');
+      if (prev && prev.status === 'Validée') await applySheet(prev, -1);
+      const f = {
+        id, techId, date: chk.d, lines: chk.lines, total: chk.total, comment: str(body.comment, 500), warnings: chk.warnings,
+        status: 'Envoyée', refuseReason: '', submittedBy: user.login, submittedAt: now(), clientId, offline: !!body.offline,
+        decidedBy: '', decidedAt: '', createdAt: prev ? prev.createdAt : now(), updatedAt: now(),
+        history: [...(prev ? prev.history || [] : []), ...(prev ? [{ at: now(), by: user.login, action: 'renvoyée', previous: { status: prev.status, total: prev.total, refuseReason: prev.refuseReason } }] : [])].slice(-30),
+      };
+      await db.put('timesheets', id, f);
+      await log(user, prev ? 'feuille d\'heures renvoyée' : 'feuille d\'heures envoyée', 'pointage', id, f.total + ' h');
+      return ok(f);
+    }
+    if (m === 'POST' && r1 && r2 === 'decision') {
+      const f = await db.get('timesheets', r1); if (!f) return notFound('Feuille introuvable.');
+      if (!canSeeSheet(f, user, sc)) return deny();
+      const why = canDecideSheet(f, user, sc.chantiers); if (why) return deny(why);
+      const decision = body.decision;
+      if (!['Validée', 'Refusée'].includes(decision)) return bad('Décision invalide.');
+      if (!isAdmin && f.status !== 'Envoyée') return bad('Cette feuille a déjà été traitée (' + f.status + ').');
+      if (decision === f.status) return bad('Cette feuille est déjà ' + decision.toLowerCase() + '.');
+      const reason = str(body.reason, 500);
+      if (decision === 'Refusée' && reason.length < 3) return bad('Indiquez le motif du refus.');
+      if (f.status === 'Validée') await applySheet(f, -1);
+      if (decision === 'Validée') await applySheet(f, +1);
+      f.history = [...(f.history || []), { at: now(), by: user.login, action: decision, reason, previous: { status: f.status } }].slice(-30);
+      f.status = decision; f.refuseReason = decision === 'Refusée' ? reason : ''; f.decidedBy = user.login; f.decidedAt = now(); f.updatedAt = now();
+      await db.put('timesheets', f.id, f);
+      await log(user, 'feuille d\'heures ' + decision.toLowerCase(), 'pointage', f.id, reason);
+      return ok(f);
+    }
+    if (m === 'DELETE') return deny('Une feuille d\'heures ne s\'efface pas : elle peut être refusée puis corrigée.');
+    return deny();
+  }
+
   // ----- Réglages entreprise -----
   if (r0 === 'settings' && r1 === 'company') {
     if (m === 'GET') return ok((await db.get('settings', 'company')) || { name: COMPANY });
@@ -582,14 +700,27 @@ async function route(req) {
       return ok({ name, counts: Object.fromEntries(Object.entries(snap).map(([k, v]) => [k, v.length])) });
     }
     if (m === 'POST' && r1 && r2 === 'restore') {
+      if (body.confirm !== 'RESTAURER') return bad('Pour confirmer, tapez RESTAURER en majuscules.');
       const b = await db.getBackup(r1); if (!b) return notFound('Sauvegarde introuvable.');
-      // Sauvegarde de sécurité avant restauration, puis réécriture des fiches (rien n'est effacé)
-      await db.putBackup('avant-restauration-' + now().replace(/[:.]/g, '-'), { at: now(), by: user.login, data: await db.snapshot() });
-      let n = 0;
-      for (const c of db.COLLECTIONS) for (const it of b.data[c] || []) { const id = c === 'users' ? it.login : (c === 'settings' ? 'company' : it.id); if (id) { await db.put(c, id, it); n++; } }
-      for (const h of b.data.history || []) { await db.appendHistory(h.equipId, h).catch(() => {}); }
-      await log(user, 'restauration', 'sauvegarde', r1, n + ' fiches');
-      return ok({ ok: true, restored: n });
+      // 1) sauvegarde de sécurité de l'état actuel
+      const safety = 'avant-restauration-' + now().replace(/[:.]/g, '-');
+      await db.putBackup(safety, { name: safety, at: now(), by: user.login, data: await db.snapshot() });
+      // 2) remise EXACTE de l'état sauvegardé : ce qui n'existait pas dans la sauvegarde est retiré
+      //    (exception : le compte administrateur principal actuel est conservé pour ne jamais perdre l'accès)
+      let written = 0, removed = 0;
+      for (const c of db.COLLECTIONS) {
+        const items = b.data[c] || [];
+        const idOf = (it) => (c === 'users' ? it.login : (c === 'settings' ? 'company' : it.id));
+        const keep = new Set(items.map(idOf).filter(Boolean));
+        for (const k of await db.keysOf(c + '/')) { const id = k.slice(c.length + 1); if (c === 'users' && id === 'admin') continue; if (!keep.has(id)) { await db.deleteKey(k); removed++; } }
+        for (const it of items) { const id = idOf(it); if (!id || (c === 'users' && id === 'admin')) continue; await db.put(c, id, it); written++; }
+      }
+      const hist = b.data.history || [];
+      const hkeep = new Set(hist.map((h) => db.histKey(h)));
+      for (const k of await db.allHistoryKeys()) if (!hkeep.has(k)) { await db.deleteKey(k); removed++; }
+      for (const h of hist) { await db.appendHistory(h.equipId, h).catch(() => {}); }
+      await log(user, 'restauration exacte', 'sauvegarde', r1, written + ' fiches remises, ' + removed + ' retirées ; sécurité : ' + safety);
+      return ok({ ok: true, restored: written, removed, safety });
     }
     return deny();
   }

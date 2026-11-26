@@ -1,6 +1,6 @@
 // Service worker MIMOUNI INDUSTRIEL ÉLECTRICITÉ : application disponible hors ligne.
-const VERSION = 'mimouni-v1.0.6';
-const SHELL = ['/', '/index.html', '/app.css?v=5', '/app.js?v=5', '/manifest.webmanifest', '/vendor/qrcode.js', '/vendor/jsQR.js', '/vendor/jspdf.umd.min.js', '/vendor/jszip.min.js', '/icons/icon-192.png', '/icons/icon-512.png', '/icons/icon-180.png'];
+const VERSION = 'mimouni-v1.1.1';
+const SHELL = ['/', '/index.html', '/app.css?v=7', '/app.js?v=7', '/manifest.webmanifest', '/vendor/qrcode.js', '/vendor/jsQR.js', '/vendor/jspdf.umd.min.js', '/vendor/jszip.min.js', '/icons/icon-192.png', '/icons/icon-512.png', '/icons/icon-180.png'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(VERSION).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));

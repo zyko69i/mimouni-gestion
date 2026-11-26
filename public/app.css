@@ -175,3 +175,31 @@ tr.click{cursor:pointer} tr.click:hover{background:#fafafa}
 .chart svg{max-width:100%;height:auto}
 .legend{display:flex;flex-wrap:wrap;gap:.3rem .8rem;font-size:.8rem;margin-top:.4rem}
 .legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px;vertical-align:middle}
+
+/* ---- recette 2 : envois refusés, pointage, tableaux en cartes ---- */
+.badge-sync.rejected{background:var(--rouge);border-color:var(--rouge);color:#fff;font-weight:700}
+.plan .chip{white-space:normal;overflow:visible;text-overflow:clip;line-height:1.25}
+.ts-card .ts-head{display:flex;justify-content:space-between;align-items:center;gap:.5rem;margin-bottom:.4rem}
+.ts-line,.ts-total{display:flex;justify-content:space-between;gap:.8rem;padding:.35rem 0;border-bottom:1px solid var(--bord)}
+.ts-total{border-bottom:0;font-weight:700}
+.ts-row{border:1px solid var(--bord);border-radius:10px;padding:.5rem;margin:.4rem 0;display:grid;gap:.4rem}
+.ts-row select,.ts-row input{width:100%;padding:.55rem .6rem;border:1px solid #cfd1d4;border-radius:8px;font-size:16px;background:#fff}
+.ts-row2{display:grid;grid-template-columns:90px 1fr 44px;gap:.4rem}
+.ts-form .btn.sm{min-height:40px}
+@media (max-width:700px){
+  .table-wrap{overflow-x:visible}
+  table.cards thead{display:none}
+  table.cards,table.cards tbody,table.cards tr,table.cards td{display:block;width:100%}
+  table.cards tr{border:1px solid var(--bord);border-radius:10px;margin:.55rem 0;padding:.45rem .7rem;background:#fff}
+  table.cards td{border:0;padding:.28rem 0;display:flex;justify-content:space-between;align-items:flex-start;gap:.8rem;text-align:right;min-width:0;overflow-wrap:anywhere}
+  table.cards td::before{content:attr(data-label);flex:none;max-width:42%;text-align:left;font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.03em;color:var(--acier);padding-top:.15rem}
+  table.cards td:first-child{display:block;text-align:left;font-weight:700;font-size:1rem;padding-bottom:.35rem;border-bottom:1px solid var(--bord);margin-bottom:.2rem}
+  table.cards td:first-child::before,table.cards td[data-label=""]::before{display:none}
+  table.cards td[data-label=""]{justify-content:flex-start;text-align:left}
+  table.cards td.vide{display:none}
+  table.cards tr.click{cursor:pointer}
+  .plan.cards td{min-width:0;border-right:0}
+  .plan.cards td .chip{display:inline-block;margin:.1rem 0 .1rem .3rem}
+}
+
+.ts-line b,.ts-total b{white-space:nowrap}

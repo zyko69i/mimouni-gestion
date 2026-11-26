@@ -2,7 +2,7 @@
    JavaScript sans framework. Données : API /api (Netlify) + copie locale IndexedDB pour le hors ligne. */
 'use strict';
 const COMPANY = 'MIMOUNI INDUSTRIEL ÉLECTRICITÉ';
-const APP_VERSION = '1.0.0';
+const APP_VERSION = '1.1.0';
 
 // ---------------- utilitaires ----------------
 const $ = (s, el = document) => el.querySelector(s);
@@ -23,6 +23,7 @@ const ABS_TYPES = ['absence', 'retard', 'congé', 'maladie', 'non-présentation'
 const HAB_KINDS = ['Électrique (NF C 18-510)', 'CACES', 'AIPR', 'SST', 'Autre'];
 
 const ICON = {
+  clock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
   home: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>',
   site: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 21h18M5 21V9l7-5 7 5v12M9 21v-6h6v6"/></svg>',
   scan: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M7 12h10"/></svg>',
@@ -60,7 +61,7 @@ const idb = (() => {
 })();
 
 // ---------------- état ----------------
-const S = { token: localStorage.getItem('mimouni_token') || '', me: null, data: null, online: navigator.onLine, queue: [], route: '', lastSync: null, apiError: false };
+const S = { token: localStorage.getItem('mimouni_token') || '', me: null, data: null, online: navigator.onLine, queue: [], rejected: [], route: '', lastSync: null, apiError: false };
 
 // ---------------- API ----------------
 class Offline extends Error {}
@@ -112,10 +113,12 @@ async function queueRefresh() { S.queue = await idb.qAll(); paintStatus(); }
 
 function queueSummary(q) {
   const inter = q.filter((x) => x.kind === 'intervention').length;
+  const sheets = q.filter((x) => x.kind === 'pointage').length;
   const photos = q.reduce((s, x) => s + (x.photos || 0), 0);
-  const other = q.length - inter;
+  const other = q.length - inter - sheets;
   const parts = [];
   if (inter) parts.push(inter + ' intervention' + (inter > 1 ? 's' : ''));
+  if (sheets) parts.push(sheets + ' feuille' + (sheets > 1 ? 's' : '') + ' d\'heures');
   if (other) parts.push(other + ' autre' + (other > 1 ? 's' : '') + ' saisie' + (other > 1 ? 's' : ''));
   if (photos) parts.push(photos + ' photo' + (photos > 1 ? 's' : ''));
   return `${q.length} élément${q.length > 1 ? 's' : ''} en attente (${parts.join(', ')})`;
@@ -145,7 +148,11 @@ async function sendQueue() {
       await api(item.method, item.path, item.body);
       await idb.qDel(item.qid); sent++;
     } catch (e) {
-      if (e.status && e.status >= 400 && e.status < 500) { await idb.qDel(item.qid); failed++; toast('Refusé par le serveur : ' + e.message); }
+      if (e.status && e.status >= 400 && e.status < 500) {
+        // Jamais perdu : copie gardée dans « Envois refusés » pour correction ou renvoi
+        S.rejected = [...(S.rejected || []), { ...item, error: e.message, rejectedAt: new Date().toISOString() }]; await rejectedSave();
+        await idb.qDel(item.qid); failed++; toast('Refusé par le serveur : ' + e.message + ' – copie gardée dans « Envois refusés ».', 7000);
+      }
       else { failed++; break; }
     }
   }
@@ -223,7 +230,9 @@ async function compressFiles(files) {
 }
 
 // ---------------- recherches dans les données ----------------
-const D = () => S.data || { chantiers: [], tasks: [], technicians: [], assignments: [], absences: [], equipment: [], users: [], recent: [] };
+const D = () => S.data || { chantiers: [], tasks: [], technicians: [], assignments: [], absences: [], equipment: [], users: [], recent: [], timesheets: [] };
+// Heures réalisées d'une tâche = heures pointées et VALIDÉES (feuilles d'heures) + ajustement manuel éventuel
+const realH = (t) => Math.round(((t.tsHours || 0) + (t.doneHours || 0)) * 100) / 100;
 const techById = (id) => D().technicians.find((t) => t.id === id);
 const techName = (id) => { const t = techById(id); return t ? `${t.firstName} ${t.lastName}`.trim() : (id ? 'Technicien (hors équipe)' : '–'); };
 const chantierById = (id) => D().chantiers.find((c) => c.id === id);
@@ -256,8 +265,8 @@ function progressOf(cid) {
   const ts = tasksOf(cid);
   const total = ts.reduce((s, t) => s + (t.plannedHours || 0), 0);
   const done = ts.filter((t) => t.status === 'Terminée').reduce((s, t) => s + (t.plannedHours || 0), 0);
-  const real = ts.reduce((s, t) => s + (t.doneHours || 0), 0);
-  const realDone = ts.filter((t) => t.status === 'Terminée').reduce((s, t) => s + (t.doneHours || 0), 0);
+  const real = ts.reduce((s, t) => s + realH(t), 0) + ((chantierById(cid) || {}).tsOther || 0);
+  const realDone = ts.filter((t) => t.status === 'Terminée').reduce((s, t) => s + realH(t), 0);
   return { total, done, real, pct: total ? Math.round((done / total) * 1000) / 10 : 0, gap: realDone - done, remaining: total - done };
 }
 // Date de fin estimée (toujours une estimation)
@@ -311,7 +320,7 @@ function assignConflicts(a) {
   D().assignments.forEach((x) => { if (x.id !== a.id && x.techId === a.techId && x.date === a.date && overlap(x.slot, a.slot)) out.push('Double affectation (' + x.slot + ')'); });
   if (absentOn(a.techId, a.date)) out.push('Technicien absent ce jour-là');
   const t = techById(a.techId);
-  if (t) currentHabs(t).forEach((hb) => { if (hb.expires && hb.expires < a.date && hb.kind.startsWith('Électrique')) out.push('Habilitation ' + hb.symbol + ' expirée'); });
+  if (t) currentHabs(t).forEach((hb) => { if (hb.expires && hb.expires < a.date) out.push('Habilitation ' + hb.symbol + ' expirée'); });
   return out;
 }
 function allConflicts() {
@@ -392,6 +401,7 @@ function navItems() {
     ['#/', 'home', r === 'technicien' ? 'Mon activité' : 'Tableau de bord'],
     ['#/chantiers', 'site', 'Chantiers'],
     ['#/planning', 'cal', 'Planning'],
+    ['#/pointage', 'clock', r === 'technicien' ? 'Mes heures' : 'Pointage des heures'],
     ['#/techniciens', 'users', r === 'technicien' ? 'Ma fiche' : 'Techniciens'],
     ['#/absences', 'abs', 'Présences et absences'],
     ['#/materiel', 'box', 'Matériel'],
@@ -422,7 +432,7 @@ function renderShell() {
     <a href="#/plus" data-nav="#/plus">${ICON.more}<span>Plus</span></a>
   </nav>`;
   $('#logout-side').onclick = (e) => { e.preventDefault(); logout(); };
-  $('#sync-badge').onclick = () => { if (S.queue.length) { if (navigator.onLine) proposeSync(); else toast(queueSummary(S.queue) + ' – envoi au retour du réseau.'); } else toast(S.lastSync ? 'Données à jour (' + fmtDT(S.lastSync) + ')' : 'Données à jour'); };
+  $('#sync-badge').onclick = () => { if ((S.rejected || []).length) { location.hash = '#/envois'; return; } if (S.queue.length) { if (navigator.onLine) proposeSync(); else toast(queueSummary(S.queue) + ' – envoi au retour du réseau.'); } else toast(S.lastSync ? 'Données à jour (' + fmtDT(S.lastSync) + ')' : 'Données à jour'); };
   paintStatus();
 }
 function paintStatus() {
@@ -431,10 +441,27 @@ function paintStatus() {
   dot.className = 'dot' + (S.apiError ? ' err' : on ? '' : ' off');
   $('#net-label').textContent = S.apiError ? 'Erreur' : on ? 'En ligne' : 'Hors ligne';
   const b = $('#sync-badge');
-  if (S.queue.length) { b.textContent = S.queue.length + ' en attente'; b.className = 'badge-sync pending'; }
+  const rj = (S.rejected || []).length;
+  if (rj) { b.textContent = rj + ' refusé' + (rj > 1 ? 's' : '') + (S.queue.length ? ' · ' + S.queue.length + ' en attente' : ''); b.className = 'badge-sync rejected'; }
+  else if (S.queue.length) { b.textContent = S.queue.length + ' en attente'; b.className = 'badge-sync pending'; }
   else { b.textContent = 'Sauvegardé'; b.className = 'badge-sync'; }
 }
 
+// Sur téléphone, chaque ligne de tableau devient une carte (libellé de la colonne devant chaque valeur)
+function cardifyTables(root = document) {
+  $$('table', root).forEach((tb) => {
+    const ths = $$('thead th', tb); if (!ths.length) return;
+    tb.classList.add('cards');
+    const labels = ths.map((th) => th.textContent.trim());
+    $$('tbody tr', tb).forEach((tr) => [...tr.children].forEach((td, i) => {
+      if (td.hasAttribute('colspan')) { td.dataset.label = ''; return; }
+      if (td.dataset.label === undefined) td.dataset.label = labels[i] || '';
+      td.classList.toggle('vide', !td.textContent.trim() && !td.querySelector('button,img,input,select'));
+    }));
+  });
+}
+let cardT = null;
+new MutationObserver(() => { cancelAnimationFrame(cardT); cardT = requestAnimationFrame(() => cardifyTables()); }).observe(document.documentElement, { childList: true, subtree: true });
 const ROUTES = {};
 async function render() {
   if (!S.me) return;
@@ -463,6 +490,7 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
 // ---------------- démarrage ----------------
 async function start() {
   await queueRefresh().catch(() => {});
+  await rejectedLoad().catch(() => {});
   const m = location.pathname.match(/^\/e\/([A-Za-z0-9-]+)/);
   const eqFromUrl = m ? m[1] : null;
   if (!S.token) {
@@ -515,6 +543,7 @@ ROUTES.home = async (v) => {
   const conflicts = allConflicts();
   v.innerHTML = `
   <div class="head"><h1>Tableau de bord</h1><span class="muted small">${isChef() ? 'Vos chantiers et votre équipe' : 'Vue globale'} – ${fmtD(day)}</span></div>
+  ${(() => { const n = (d.timesheets || []).filter((f) => f.status === 'Envoyée' && canDecideLocal(f)).length; return n ? `<div class="notice" style="margin-bottom:1rem">${ICON.clock} <b>${n} feuille${n > 1 ? 's' : ''} d'heures à valider</b> – <a href="#/pointage">ouvrir le pointage</a></div>` : ''; })()}
   ${!d.chantiers.length && isAdmin() ? `<div class="notice" style="margin-bottom:1rem">Aucune donnée pour l'instant. Créez vos techniciens et chantiers, ou chargez des données d'exemple dans <a href="#/reglages">Réglages</a>.</div>` : ''}
   <div class="grid g4" style="margin-bottom:1rem">
     ${kpi(active.length, 'Chantiers actifs')}
@@ -550,7 +579,9 @@ async function viewMyActivity(v) {
   const myTasks = D().tasks.filter((x) => x.assignee === tid && !['Terminée', 'Annulée'].includes(x.status));
   const week = D().assignments.filter((a) => a.techId === tid && a.date >= day && a.date <= addDays(day, 7)).sort((a, b) => a.date.localeCompare(b.date));
   v.innerHTML = `<div class="head"><h1>Mon activité</h1><span class="muted small">${esc(me.name)}</span></div>
-  <a class="btn primary bigbtn" href="#/scanner" style="margin-bottom:1rem">${ICON.scan} Scanner un équipement</a>
+  <a class="btn primary bigbtn" href="#/scanner" style="margin-bottom:.6rem">${ICON.scan} Scanner un équipement</a>
+  <a class="btn dark bigbtn" href="#/pointage" style="margin-bottom:1rem">${ICON.clock} Pointer mes heures du jour</a>
+  ${(() => { const ref = (D().timesheets || []).filter((f) => f.techId === tid && f.status === 'Refusée'); return ref.length ? `<div class="notice" style="margin-bottom:1rem"><b>${ref.length} feuille${ref.length > 1 ? 's' : ''} d'heures refusée${ref.length > 1 ? 's' : ''}</b> : <a href="#/pointage">corriger et renvoyer</a>.</div>` : ''; })()}
   ${!tid ? '<div class="notice">Votre compte n\'est pas encore relié à une fiche technicien. Prévenez l\'administrateur.</div>' : ''}
   <div class="grid g2">
   <div class="card"><h2>Mes tâches en cours</h2>${myTasks.map((x) => `<div class="list"><div class="item"><a href="#/chantier/${x.chantierId}">${esc(x.title)}</a><span>${statusPill(x.status)}</span></div></div>`).join('') || '<p class="muted">Aucune tâche.</p>'}</div>
@@ -625,7 +656,7 @@ ROUTES.chantier = async (v, id) => {
   </div>
   <div class="card"><div class="head"><h2>Tâches</h2>${canTask ? '<button class="btn primary sm" id="new-task">+ Tâche</button>' : ''}</div>
     <div class="table-wrap"><table><thead><tr><th>Tâche</th><th>Statut</th><th>Prévu</th><th>Réalisé</th><th>Échéance</th><th>Affecté à</th><th></th></tr></thead><tbody>
-    ${tasks.map((t) => { const mine = isTech() && t.assignee === S.me.technicianId; const edit = canTask || mine; return `<tr><td>${esc(t.title)}${t.status === 'Bloquée' ? `<br><span class="small err">Bloquée : ${esc(t.blockReason)}</span>` : ''}${t.conflicts && t.conflicts.length && !isTech() ? '<br><span class="pill orange">Conflit de modification signalé</span>' : ''}</td><td>${statusPill(t.status)}</td><td>${h(t.plannedHours)}</td><td>${h(t.doneHours)}</td><td>${fmtD(t.end)} ${taskLate(t) ? '<span class="pill red">Retard</span>' : ''}</td><td>${esc(techName(t.assignee))}</td><td>${edit ? `<button class="btn sm" data-task="${t.id}">Mettre à jour</button>` : ''}</td></tr>`; }).join('') || '<tr><td colspan="7" class="muted">Aucune tâche.</td></tr>'}
+    ${tasks.map((t) => { const mine = isTech() && t.assignee === S.me.technicianId; const edit = canTask || mine; return `<tr><td>${esc(t.title)}${t.status === 'Bloquée' ? `<br><span class="small err">Bloquée : ${esc(t.blockReason)}</span>` : ''}${t.conflicts && t.conflicts.length && !isTech() ? '<br><span class="pill orange">Conflit de modification signalé</span>' : ''}</td><td>${statusPill(t.status)}</td><td>${h(t.plannedHours)}</td><td>${h(realH(t))}</td><td>${fmtD(t.end)} ${taskLate(t) ? '<span class="pill red">Retard</span>' : ''}</td><td>${esc(techName(t.assignee))}</td><td>${edit ? `<button class="btn sm" data-task="${t.id}">Mettre à jour</button>` : ''}</td></tr>`; }).join('') || '<tr><td colspan="7" class="muted">Aucune tâche.</td></tr>'}
     </tbody></table></div></div>
   <div class="grid g2">
     <div class="card"><h2>Matériel installé</h2>${equip.map((e) => `<div class="list"><div class="item"><a href="#/equipement/${e.id}">${esc(e.name)}</a><span class="muted small">${esc(e.id)}</span></div></div>`).join('') || '<p class="muted">Aucun équipement.</p>'}</div>
@@ -636,8 +667,8 @@ ROUTES.chantier = async (v, id) => {
   const on = (sel, fn) => { const el = $(sel, v); if (el) el.onclick = fn; };
   on('#edit-ch', () => chantierForm(c));
   on('#pdf', () => chantierPDF(c));
-  on('#propose', async () => { if (await confirmBox('Proposer la clôture de ce chantier à l\'administrateur ?')) { await api('PUT', 'chantiers/' + c.id, { status: 'Clôture proposée' }); toast('Clôture proposée'); refresh(); } });
-  on('#close-ch', async () => { if (await confirmBox('Valider la clôture ? Le chantier passera en « Clôturé » (archivé, jamais effacé).')) { await api('PUT', 'chantiers/' + c.id, { status: 'Clôturé' }); toast('Chantier clôturé'); refresh(); } });
+  on('#propose', async () => { if (await confirmBox('Proposer la clôture de ce chantier à l\'administrateur ?')) { try { await api('PUT', 'chantiers/' + c.id, { status: 'Clôture proposée' }); } catch (e) { return alertBox(e.message, 'Clôture impossible pour l\'instant'); } toast('Clôture proposée'); refresh(); } });
+  on('#close-ch', async () => { if (await confirmBox('Valider la clôture ? Le chantier passera en « Clôturé » (archivé, jamais effacé).')) { try { await api('PUT', 'chantiers/' + c.id, { status: 'Clôturé' }); } catch (e) { return alertBox(e.message, 'Clôture impossible pour l\'instant'); } toast('Chantier clôturé'); refresh(); } });
   on('#team', () => formModal({ title: 'Équipe du chantier', fields: [{ name: 'team', label: 'Techniciens', type: 'checks', options: D().technicians.filter((t) => t.active !== false).map((t) => [t.id, t.firstName + ' ' + t.lastName]), value: c.team || [] }], onSubmit: async (vals) => { await api('PUT', 'chantiers/' + c.id, { team: vals.team }); toast('Équipe mise à jour'); refresh(); } }));
   on('#new-task', () => taskForm(c));
   on('#add-note', () => formModal({ title: 'Ajouter au chantier', fields: isTech() ? [{ name: 'photos', label: 'Photos', type: 'photos', capture: true }, { name: 'content', label: 'Légende', type: 'textarea' }] : [{ name: 'title', label: 'Titre (ex. plan, schéma électrique, remarque)' }, { name: 'content', label: 'Texte', type: 'textarea' }, { name: 'photos', label: 'Photos / scans de plans', type: 'photos' }], onSubmit: async (vals) => { await api('POST', `chantiers/${c.id}/notes`, vals); toast('Ajouté'); refresh(); } }));
@@ -657,11 +688,12 @@ function taskUpdate(t, c) {
   const statuses = isAdmin() ? TASK_STATUS : TASK_STATUS.filter((s) => s !== 'Annulée');
   const fields = [
     { name: 'status', label: 'Statut', type: 'select', options: statuses, value: t.status },
-    { name: 'doneHours', label: 'Heures réalisées (cumul)', type: 'number', step: '0.5', min: '0', max: '10000', value: t.doneHours },
     { name: 'blockReason', label: 'Motif de blocage (obligatoire si « Bloquée »)', value: t.blockReason, placeholder: 'attente matériel, attente client, consignation…' },
   ];
+  if (!isTech()) fields.push({ name: 'doneHours', label: `Ajustement d'heures hors pointage (les heures pointées validées : ${h(t.tsHours || 0)} s'ajoutent)`, type: 'number', step: '0.5', min: '0', max: '10000', value: t.doneHours || 0 });
+  const intro = isTech() ? '<p class="muted small">Vos heures se déclarent dans « Mes heures » (feuille du jour), puis le chef les valide.</p>' : '';
   if (!isTech()) fields.push({ name: 'plannedHours', label: 'Heures prévues', type: 'number', step: '0.5', min: '0', max: '10000', value: t.plannedHours }, { name: 'end', label: 'Échéance', type: 'date', value: t.end }, { name: 'assignee', label: 'Affectée à', type: 'select', options: [['', '– Personne –'], ...(c.team || []).map((x) => [x, techName(x)])], value: t.assignee });
-  formModal({ title: t.title, fields, onSubmit: async (vals) => {
+  formModal({ title: t.title, intro, fields, onSubmit: async (vals) => {
     const r = await api('PUT', 'tasks/' + t.id, { ...vals, baseUpdatedAt: t.updatedAt }, { queueable: true, kind: 'tâche', label: 'Tâche « ' + t.title + ' » : ' + vals.status });
     if (r.queued) { toast('Hors ligne : modification enregistrée sur l\'appareil.'); return; }
     toast(r.conflict ? 'Enregistré – conflit signalé (une autre personne avait modifié la tâche).' : 'Tâche mise à jour'); refresh();
@@ -784,7 +816,7 @@ ROUTES.technicien = async (v, id) => {
     <div class="card"><h2>Habilitations</h2>${habTable(t, true)}<p class="muted small">Alertes : orange à 60 jours, rouge à 30 jours, puis « Expirée ». Un renouvellement ajoute une ligne, l'ancienne reste en historique.</p></div>
     <div class="card"><h2>Prochaines affectations</h2>${as.map((a) => `<div class="list"><div class="item"><span>${fmtD(a.date)} · ${esc(a.slot)}</span><span>${esc(chantierById(a.chantierId)?.name || 'Autre chantier')}</span></div></div>`).join('') || '<p class="muted">Aucune.</p>'}</div>
     <div class="card"><h2>Présences et absences</h2>${abs.map((a) => `<div class="list"><div class="item"><span>${esc(absLabel(a))} · ${fmtD(a.start)}${a.end && a.end !== a.start ? ' → ' + fmtD(a.end) : ''}</span><span class="pill">${esc(a.status)}</span></div></div>`).join('') || '<p class="muted">Aucune absence.</p>'}</div>
-    <div class="card"><h2>Historique des tâches</h2>${tasks.map((x) => `<div class="list"><div class="item"><a href="#/chantier/${x.chantierId}">${esc(x.title)}</a><span>${statusPill(x.status)} ${h(x.doneHours)}</span></div></div>`).join('') || '<p class="muted">Aucune.</p>'}</div>
+    <div class="card"><h2>Historique des tâches</h2>${tasks.map((x) => `<div class="list"><div class="item"><a href="#/chantier/${x.chantierId}">${esc(x.title)}</a><span>${statusPill(x.status)} ${h(realH(x))}</span></div></div>`).join('') || '<p class="muted">Aucune.</p>'}</div>
   </div>`;
   const e1 = $('#edit-t', v); if (e1) e1.onclick = () => techForm(t);
   const e2 = $('#add-hab', v); if (e2) e2.onclick = () => formModal({ title: 'Ajouter / renouveler une habilitation', fields: [
@@ -1020,7 +1052,7 @@ async function chantierPDF(c) {
   kv('Fin estimée (estimation)', est.reliable ? fmtD(est.date) + (est.delta ? ` (${est.delta > 0 ? '+' : ''}${est.delta} jours ouvrés par rapport à la fin prévue)` : '') : est.reason);
   section('Tâches');
   table([{ t: 'Tâche', w: 66 }, { t: 'Statut', w: 24 }, { t: 'Prévu', w: 18 }, { t: 'Réalisé', w: 18 }, { t: 'Échéance', w: 22 }, { t: 'Affecté à', w: 32 }],
-    D().tasks.filter((t) => t.chantierId === c.id).map((t) => [t.title + (t.status === 'Bloquée' ? ' (bloquée : ' + t.blockReason + ')' : ''), t.status, h(t.plannedHours), h(t.doneHours), fmtD(t.end), techName(t.assignee)]));
+    D().tasks.filter((t) => t.chantierId === c.id).map((t) => [t.title + (t.status === 'Bloquée' ? ' (bloquée : ' + t.blockReason + ')' : ''), t.status, h(t.plannedHours), h(realH(t)), fmtD(t.end), techName(t.assignee)]));
   const equip = D().equipment.filter((e) => e.chantierId === c.id);
   section('Équipements installés');
   if (equip.length) table([{ t: 'Code', w: 28 }, { t: 'Désignation', w: 70 }, { t: 'Type', w: 30 }, { t: 'Emplacement', w: 52 }], equip.map((e) => [e.id, e.name, e.type, e.location]));
@@ -1034,6 +1066,31 @@ async function chantierPDF(c) {
   const TYPE_FR = { intervention: 'Intervention', remarque: 'Remarque', photo: 'Photo', correction: 'Correction' };
   if (shown.length) table([{ t: 'Date', w: 28 }, { t: 'Équipement', w: 36 }, { t: 'Type', w: 22 }, { t: 'Détail', w: 62 }, { t: 'Auteur', w: 32 }], shown.sort((a, b) => a.at.localeCompare(b.at)).map((x) => [fmtDT(x.at), x.eq, TYPE_FR[x.type] || x.type, x.content + (x.reason ? ' (motif : ' + x.reason + ')' : ''), x.authorName || x.author]));
   else kv('', 'Aucune intervention enregistrée.');
+  // Photos du chantier (notes du chantier + interventions affichées) en vignettes
+  const pics = [];
+  try { (await api('GET', `chantiers/${c.id}/notes`)).forEach((n) => (n.photos || []).forEach((id) => pics.push({ id, at: n.at, cap: n.title || n.content || 'Photo du chantier' }))); } catch { /* hors ligne */ }
+  shown.forEach((x) => (x.photos || []).forEach((id) => pics.push({ id, at: x.at, cap: x.eq + (x.content ? ' – ' + x.content : '') })));
+  pics.sort((a, b) => a.at.localeCompare(b.at));
+  if (pics.length) {
+    section('Photos du chantier');
+    const TW = 42, TH = 32, GAP = 3.3, PER = 4; let col = 0;
+    for (const ph of pics.slice(0, 24)) {
+      let data = photoCache[ph.id];
+      if (!data) { try { data = (await api('GET', 'photos/' + ph.id)).dataUrl; photoCache[ph.id] = data; } catch { continue; } }
+      const img = await new Promise((res) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => res(null); i.src = data; });
+      if (!img) continue;
+      if (col === 0) need(TH + 12);
+      const x0 = M + col * (TW + GAP);
+      const r = Math.min(TW / img.width, TH / img.height); const w = img.width * r, hh = img.height * r;
+      doc.setDrawColor(225, 226, 228); doc.rect(x0, y, TW, TH);
+      try { doc.addImage(data, /png/i.test(data.slice(0, 30)) ? 'PNG' : 'JPEG', x0 + (TW - w) / 2, y + (TH - hh) / 2, w, hh); } catch { /* image illisible */ }
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(6.8); doc.setTextColor(90, 90, 90);
+      doc.text(doc.splitTextToSize(fmtDT(ph.at) + ' · ' + ph.cap, TW).slice(0, 2), x0, y + TH + 3); doc.setTextColor(17, 17, 17);
+      col++; if (col === PER) { col = 0; y += TH + 10; }
+    }
+    if (col) y += TH + 10;
+    if (pics.length > 24) kv('', (pics.length - 24) + ' autre(s) photo(s) dans le logiciel.');
+  }
   need(30); y += 4; doc.setFont('helvetica', 'bold'); doc.setFontSize(9.5); doc.text('Visa du responsable', M, y); doc.text('Visa du client', W / 2 + 5, y); doc.setDrawColor(138, 141, 145); doc.rect(M, y + 2, W / 2 - M - 5, 20); doc.rect(W / 2 + 5, y + 2, W / 2 - M - 5, 20);
   const pages = doc.getNumberOfPages();
   const contact = [company.address, company.zipCity, company.phone, company.email, company.siret ? 'SIRET ' + company.siret : ''].filter(Boolean).join(' · ');
@@ -1043,6 +1100,7 @@ async function chantierPDF(c) {
   toast('Rapport PDF généré : ' + name);
 }
 
+const csvD = (s) => (s ? fmtD(s) : '');
 function csv(rows) { return '\ufeff' + rows.map((r) => r.map((c) => `"${String(c ?? '').replace(/"/g, '""')}"`).join(';')).join('\r\n'); }
 ROUTES.rapports = async (v) => {
   if (isTech()) { v.innerHTML = '<div class="card"><p>Les rapports sont réservés aux chefs de chantier et à l\'administrateur.</p></div>'; return; }
@@ -1050,13 +1108,14 @@ ROUTES.rapports = async (v) => {
   <div class="grid g2">
   <div class="card"><h2>Rapport PDF de chantier</h2><label class="f">Chantier<select id="rp-ch">${D().chantiers.map((c) => `<option value="${c.id}">${esc(c.name)}</option>`).join('')}</select></label><button class="btn primary" id="rp-go" ${D().chantiers.length ? '' : 'disabled'}>Générer le PDF</button>
     <p class="muted small">En-tête MIMOUNI INDUSTRIEL ÉLECTRICITÉ, infos et dates du chantier, avancement, heures, tâches, matériel, interventions, zone de visa.</p></div>
-  <div class="card"><h2>Exports tableur (CSV)</h2><div class="row"><button class="btn" id="x-tasks">Tâches et heures</button><button class="btn" id="x-abs">Absences</button>${isAdmin() ? '<button class="btn" id="x-habs">Habilitations</button>' : ''}</div><p class="muted small">${isChef() ? 'Limité à vos chantiers et à votre équipe.' : 'Ouvrable dans Excel.'}</p></div>
+  <div class="card"><h2>Exports tableur (CSV)</h2><div class="row"><button class="btn" id="x-tasks">Tâches et heures</button><button class="btn" id="x-abs">Absences</button><button class="btn" id="x-ts">Feuilles d'heures</button>${isAdmin() ? '<button class="btn" id="x-habs">Habilitations</button>' : ''}</div><p class="muted small">${isChef() ? 'Limité à vos chantiers et à votre équipe.' : 'Ouvrable dans Excel.'}</p></div>
   ${isAdmin() ? `<div class="card"><h2>Export complet (ZIP)</h2><p class="small">Toutes les données (JSON) et toutes les photos, dans un fichier ZIP daté.</p><button class="btn dark" id="x-all">Exporter tout (ZIP)</button><p class="muted small" id="x-all-msg"></p></div>` : ''}
   </div>`;
   $('#rp-go', v).onclick = async () => { const c = chantierById($('#rp-ch', v).value); if (c) { try { await chantierPDF(c); } catch (e) { toast(e.message); } } };
-  $('#x-tasks', v).onclick = () => download(`taches-${todayISO()}.csv`, new Blob([csv([['Chantier', 'Tâche', 'Statut', 'Heures prévues', 'Heures réalisées', 'Échéance', 'Affecté à'], ...D().tasks.map((t) => [chantierById(t.chantierId)?.name, t.title, t.status, String(t.plannedHours).replace('.', ','), String(t.doneHours).replace('.', ','), t.end, techName(t.assignee)])])], { type: 'text/csv' }));
-  $('#x-abs', v).onclick = () => download(`absences-${todayISO()}.csv`, new Blob([csv([['Technicien', 'Type', 'Du', 'Au', 'Statut', 'Motif'], ...D().absences.map((a) => [techName(a.techId), absLabel(a), a.start, a.end, a.status, a.motif])])], { type: 'text/csv' }));
-  const xh = $('#x-habs', v); if (xh) xh.onclick = () => download(`habilitations-${todayISO()}.csv`, new Blob([csv([['Technicien', 'Type', 'Symbole', 'Délivrée', 'Fin de validité', 'État'], ...D().technicians.flatMap((t) => currentHabs(t).map((hb) => [t.firstName + ' ' + t.lastName, hb.kind, hb.symbol, hb.issued, hb.expires, habStatus(hb).label]))])], { type: 'text/csv' }));
+  $('#x-tasks', v).onclick = () => download(`taches-${todayISO()}.csv`, new Blob([csv([['Chantier', 'Tâche', 'Statut', 'Heures prévues', 'Heures réalisées', 'Échéance', 'Affecté à'], ...D().tasks.map((t) => [chantierById(t.chantierId)?.name, t.title, t.status, String(t.plannedHours).replace('.', ','), String(realH(t)).replace('.', ','), csvD(t.end), techName(t.assignee)])])], { type: 'text/csv' }));
+  $('#x-abs', v).onclick = () => download(`absences-${todayISO()}.csv`, new Blob([csv([['Technicien', 'Type', 'Du', 'Au', 'Statut', 'Motif'], ...D().absences.map((a) => [techName(a.techId), absLabel(a), csvD(a.start), csvD(a.end), a.status, a.motif])])], { type: 'text/csv' }));
+  const xh = $('#x-habs', v); if (xh) xh.onclick = () => download(`habilitations-${todayISO()}.csv`, new Blob([csv([['Technicien', 'Type', 'Symbole', 'Délivrée', 'Fin de validité', 'État'], ...D().technicians.flatMap((t) => currentHabs(t).map((hb) => [t.firstName + ' ' + t.lastName, hb.kind, hb.symbol, csvD(hb.issued), csvD(hb.expires), habStatus(hb).label]))])], { type: 'text/csv' }));
+  $('#x-ts', v).onclick = () => download(`feuilles-heures-${todayISO()}.csv`, new Blob([csv([['Date', 'Technicien', 'Chantier', 'Tâche', 'Heures', 'Détail', 'Statut', 'Décidé par', 'Motif du refus'], ...(D().timesheets || []).slice().sort((a, b) => a.date.localeCompare(b.date)).flatMap((f) => (f.lines || []).map((l) => [csvD(f.date), techName(f.techId), chantierById(l.chantierId)?.name || 'Autre chantier', (D().tasks.find((t) => t.id === l.taskId) || {}).title || '', String(l.hours).replace('.', ','), l.note, f.status === 'Envoyée' ? 'À valider' : f.status, userName(f.decidedBy), f.refuseReason]))])], { type: 'text/csv' }));
   const xa = $('#x-all', v); if (xa) xa.onclick = () => exportAll($('#x-all-msg', v));
 };
 async function exportAll(msgEl) {
@@ -1132,13 +1191,175 @@ ROUTES.reglages = async (v) => {
     { name: 'password', label: 'Nouveau mot de passe (laisser vide pour ne pas changer)', autocomplete: 'off' },
   ], onSubmit: async (vals) => { const body = { name: vals.name, role: vals.role, technicianId: vals.technicianId, active: vals.active === '1' }; if (vals.password) body.password = vals.password; await api('PUT', 'users/' + u.login, body); toast('Compte mis à jour'); refresh(); } }); }));
   $('#bk-now', v).onclick = async () => { const r = await api('POST', 'backups'); toast('Sauvegarde créée : ' + r.name); render(); };
-  $$('[data-restore]', v).forEach((b) => (b.onclick = async () => { if (await confirmBox(`Restaurer la sauvegarde « ${esc(b.dataset.restore)} » ? Une sauvegarde de sécurité sera faite avant.`, 'Restaurer')) { const r = await api('POST', `backups/${encodeURIComponent(b.dataset.restore)}/restore`); toast(r.restored + ' fiches restaurées'); refresh(); } }));
-  $('#demo-load', v).onclick = async () => { const r = await api('POST', 'demo'); toast('Données d\'exemple chargées'); refresh(); };
+  $$('[data-restore]', v).forEach((b) => (b.onclick = () => formModal({ title: 'Restaurer une sauvegarde', submitLabel: 'Restaurer maintenant',
+    intro: `<div class="notice"><b>Attention :</b> le logiciel va revenir <b>exactement</b> à l'état de la sauvegarde « ${esc(b.dataset.restore)} ». Tout ce qui a été créé ou modifié depuis (chantiers, tâches, heures, absences, matériel, historique, comptes) sera <b>retiré</b>. Une sauvegarde de sécurité de l'état actuel est faite juste avant. Le compte administrateur actuel est conservé.</div>`,
+    fields: [{ name: 'confirm', label: 'Pour confirmer, tapez RESTAURER en majuscules', required: true, autocomplete: 'off' }],
+    onSubmit: async (vals) => { if (vals.confirm !== 'RESTAURER') throw new Error('Tapez exactement RESTAURER (en majuscules) pour confirmer.'); const r = await api('POST', `backups/${encodeURIComponent(b.dataset.restore)}/restore`, { confirm: vals.confirm }); toast(`Restauration faite : ${r.restored} fiches remises, ${r.removed} retirées. Sécurité : ${r.safety}`, 8000); refresh(); } })));
+  $('#demo-load', v).onclick = async () => { if (!(await confirmBox('Charger des données d\'exemple (techniciens, chantiers, tâches… marqués « Exemple ») dans le logiciel ? Elles s\'ajoutent à vos vraies données, jusqu\'à ce que vous les effaciez.', 'Charger les exemples'))) return; await api('POST', 'demo'); toast('Données d\'exemple chargées'); refresh(); };
   $('#demo-clear', v).onclick = async () => { if (await confirmBox('Effacer toutes les données marquées « Exemple » ? Vos vraies données ne sont pas touchées.', 'Effacer')) { const r = await api('DELETE', 'demo'); toast(r.removed + ' éléments d\'exemple effacés'); refresh(); } };
 };
 function genPassword() { const a = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789'; const b = new Uint32Array(12); crypto.getRandomValues(b); return [...b].map((x) => a[x % a.length]).join(''); }
 
 // ---------------- Profil et menu Plus ----------------
+// ---------------- pointage des heures (feuilles d'heures) ----------------
+// Le technicien remplit une feuille par jour (lignes chantier / tâche / heures) et l'envoie.
+// Le chef de son périmètre la valide ou la refuse avec un motif ; l'administrateur peut tout faire.
+// Les heures validées s'ajoutent aux heures réalisées des tâches (calcul fait par le serveur).
+function canDecideLocal(f) {
+  if (isAdmin()) return true;
+  if (!isChef()) return false;
+  if (f.techId && f.techId === S.me.technicianId) return false;
+  return (f.lines || []).length > 0 && f.lines.every((l) => (chantierById(l.chantierId) || {}).chefId === S.me.login);
+}
+const tsPill = (st) => `<span class="pill ${st === 'Validée' ? 'green' : st === 'Refusée' ? 'red' : 'orange'}">${esc(st === 'Envoyée' ? 'À valider' : st)}</span>`;
+const dayLabel = (d) => { const x = parseD(d).toLocaleDateString('fr-FR', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' }); return x.charAt(0).toUpperCase() + x.slice(1); };
+function alertBox(msg, title = 'Information') {
+  return new Promise((res) => modal(`<h2>${esc(title)}</h2><p>${esc(msg)}</p><div class="actions"><button class="btn primary" data-a="ok">J'ai compris</button></div>`, (root, close) => { root.querySelector('[data-a=ok]').onclick = () => { close(); res(); }; }));
+}
+function sheetLinesHTML(f) {
+  return `<div class="ts-lines">${(f.lines || []).map((l) => { const c = chantierById(l.chantierId); const t = D().tasks.find((x) => x.id === l.taskId); return `<div class="ts-line"><span>${esc(c ? c.name : 'Autre chantier')}${t ? ' – ' + esc(t.title) : ''}${l.note ? `<br><span class="muted small">${esc(l.note)}</span>` : ''}</span><b>${h(l.hours)}</b></div>`; }).join('')}</div>`;
+}
+function sheetCard(f, { decide = false } = {}) {
+  const who = isTech() ? '' : `<b>${esc(techName(f.techId))}</b> · `;
+  return `<div class="card ts-card" data-sheet="${esc(f.id)}">
+    <div class="ts-head"><span>${who}${esc(dayLabel(f.date))}</span>${tsPill(f.status)}</div>
+    ${sheetLinesHTML(f)}
+    <div class="ts-total"><span>Total de la journée</span><b>${h(f.total)}</b></div>
+    ${f.comment ? `<p class="small">💬 ${esc(f.comment)}</p>` : ''}
+    ${(f.warnings || []).map((w) => `<p class="small" style="color:var(--orange)">⚠ ${esc(w)}</p>`).join('')}
+    ${f.status === 'Refusée' ? `<p class="err small">Refusée par ${esc(userName(f.decidedBy))} : ${esc(f.refuseReason)}</p>` : ''}
+    ${f.status === 'Validée' ? `<p class="muted small">Validée par ${esc(userName(f.decidedBy))} le ${fmtDT(f.decidedAt)}</p>` : ''}
+    ${f.offline ? '<p class="muted small">Saisie hors ligne</p>' : ''}
+    <div class="row">${decide && canDecideLocal(f) && (f.status === 'Envoyée' || isAdmin()) ? `${f.status !== 'Validée' ? `<button class="btn primary" data-ts-ok="${esc(f.id)}">Valider</button>` : ''}${f.status !== 'Refusée' ? `<button class="btn" data-ts-no="${esc(f.id)}">Refuser</button>` : ''}` : ''}
+    ${(f.techId === S.me.technicianId && f.status !== 'Validée') || isAdmin() ? `<button class="btn sm" data-ts-edit="${esc(f.id)}">${f.status === 'Refusée' ? 'Corriger et renvoyer' : 'Modifier'}</button>` : ''}</div>
+  </div>`;
+}
+
+function sheetForm(prefill = null, opts = {}) {
+  const me = S.me;
+  const chantiers = D().chantiers.filter((c) => c.status !== 'Clôturé');
+  const techs = D().technicians.filter((t) => t.active !== false);
+  const pre = prefill || {};
+  const techField = isAdmin()
+    ? `<label class="f">Technicien<select name="techId" required>${techs.map((t) => `<option value="${esc(t.id)}" ${t.id === pre.techId ? 'selected' : ''}>${esc(t.firstName + ' ' + t.lastName)}</option>`).join('')}</select></label>`
+    : '';
+  const day = pre.date || todayISO();
+  const chOpts = (sel) => `<option value="">– Chantier –</option>` + chantiers.map((c) => `<option value="${esc(c.id)}" ${c.id === sel ? 'selected' : ''}>${esc(c.name)}</option>`).join('');
+  const taskOpts = (cid, sel) => `<option value="">– Sans tâche précise –</option>` + D().tasks.filter((t) => t.chantierId === cid && t.status !== 'Annulée').map((t) => `<option value="${esc(t.id)}" ${t.id === sel ? 'selected' : ''}>${esc(t.title)}</option>`).join('');
+  const lineHTML = (l = {}) => `<div class="ts-row"><select name="ch" aria-label="Chantier">${chOpts(l.chantierId)}</select><select name="task" aria-label="Tâche">${taskOpts(l.chantierId, l.taskId)}</select>
+    <div class="ts-row2"><input name="hours" type="number" min="0.25" max="24" step="0.25" inputmode="decimal" placeholder="Heures" value="${l.hours ?? ''}" aria-label="Heures"><input name="note" placeholder="Détail (facultatif)" maxlength="300" value="${esc(l.note || '')}" aria-label="Détail"><button type="button" class="btn sm" data-del title="Retirer la ligne">✕</button></div></div>`;
+  let lines = pre.lines && pre.lines.length ? pre.lines : null;
+  if (!lines) {
+    const tid = isAdmin() ? pre.techId : me.technicianId;
+    const planned = D().assignments.filter((a) => a.techId === tid && a.date === day && chantierById(a.chantierId));
+    lines = planned.length ? planned.map((a) => ({ chantierId: a.chantierId, hours: a.slot === 'journée' ? 7 : 3.5 })) : [{}];
+  }
+  modal(`<h2>${pre.date ? 'Feuille d\'heures du ' + fmtD(pre.date) : 'Feuille d\'heures du jour'}</h2>
+    <form class="ts-form">${techField}
+      <label class="f">Jour travaillé<input type="date" name="date" required max="${todayISO()}" value="${esc(day)}"></label>
+      <b class="small">Heures par chantier et par tâche</b>
+      <div id="ts-rows">${lines.map(lineHTML).join('')}</div>
+      <button type="button" class="btn sm" id="ts-add">+ Ajouter une ligne</button>
+      <p class="ts-total"><span>Total</span><b id="ts-sum">0 h</b></p>
+      <label class="f">Commentaire pour le chef (facultatif)<textarea name="comment" maxlength="500">${esc(pre.comment || '')}</textarea></label>
+      <p class="err" data-err></p>
+      <div class="actions"><button type="button" class="btn" data-a="c">Annuler</button><button class="btn primary" type="submit">Envoyer au chef</button></div>
+    </form>`, (root, close) => {
+    const form = root.querySelector('form'); const rows = root.querySelector('#ts-rows');
+    const sum = () => { const t = $$('input[name=hours]', rows).reduce((s, i) => s + (Number(i.value) || 0), 0); root.querySelector('#ts-sum').textContent = h(t); root.querySelector('#ts-sum').style.color = t > 24 ? 'var(--rouge)' : ''; };
+    const bind = (row) => {
+      row.querySelector('[name=ch]').onchange = (e) => { row.querySelector('[name=task]').innerHTML = taskOpts(e.target.value, ''); };
+      row.querySelector('[name=hours]').oninput = sum;
+      row.querySelector('[data-del]').onclick = () => { if ($$('.ts-row', rows).length > 1) { row.remove(); sum(); } else toast('Il faut au moins une ligne.'); };
+    };
+    $$('.ts-row', rows).forEach(bind); sum();
+    form.addEventListener('input', () => { root.querySelector('[data-err]').textContent = ''; });
+    root.querySelector('#ts-add').onclick = () => { rows.insertAdjacentHTML('beforeend', lineHTML({})); bind(rows.lastElementChild); };
+    root.querySelector('[data-a=c]').onclick = close;
+    form.onsubmit = async (e) => {
+      e.preventDefault();
+      const err = root.querySelector('[data-err]'); err.textContent = '';
+      const body = { date: form.elements.date.value, comment: form.elements.comment.value.trim(), lines: $$('.ts-row', rows).map((r) => ({ chantierId: r.querySelector('[name=ch]').value, taskId: r.querySelector('[name=task]').value, hours: Number(r.querySelector('[name=hours]').value), note: r.querySelector('[name=note]').value.trim() })) };
+      if (isAdmin()) body.techId = form.elements.techId.value;
+      // contrôles immédiats (le serveur revérifie tout)
+      if (!body.date) { err.textContent = 'Indiquez le jour.'; return; }
+      if (body.date > todayISO()) { err.textContent = 'On ne peut pas pointer un jour qui n\'est pas encore passé.'; return; }
+      const bad = body.lines.findIndex((l) => !l.chantierId || !(l.hours > 0) || l.hours > 24);
+      if (bad >= 0) { err.textContent = 'Ligne ' + (bad + 1) + ' : choisissez un chantier et des heures entre 0,25 et 24.'; return; }
+      const total = body.lines.reduce((s, l) => s + l.hours, 0);
+      if (total > 24) { err.textContent = 'Total de la journée : ' + h(total) + '. 24 h maximum.'; return; }
+      if (opts.clientId) body.clientId = opts.clientId;
+      const btn = form.querySelector('[type=submit]'); btn.disabled = true;
+      try {
+        const r = await api('POST', 'timesheets', body, { queueable: true, kind: 'pointage', label: 'Feuille d\'heures du ' + fmtD(body.date) + ' (' + h(total) + ')' });
+        close();
+        if (opts.onDone) await opts.onDone(r);
+        if (r.queued) toast('Hors ligne : feuille enregistrée sur l\'appareil. Elle partira au retour du réseau, après votre confirmation.', 6000);
+        else { toast('Feuille d\'heures envoyée au chef ✔'); await refresh(); }
+      } catch (ex) { err.textContent = ex.message; btn.disabled = false; }
+    };
+  });
+}
+
+ROUTES.pointage = async (v) => {
+  const all = (D().timesheets || []).slice().sort((a, b) => b.date.localeCompare(a.date) || techName(a.techId).localeCompare(techName(b.techId)));
+  const pendingQ = S.queue.filter((q) => q.kind === 'pointage');
+  const weekStart = addDays(todayISO(), -((parseD(todayISO()).getDay() + 6) % 7));
+  if (isTech()) {
+    const mine = all.filter((f) => f.techId === S.me.technicianId);
+    const wk = mine.filter((f) => f.date >= weekStart);
+    const sumOf = (l) => h(l.reduce((s, f) => s + (f.total || 0), 0));
+    v.innerHTML = `<div class="head"><h1>Mes heures</h1><button class="btn primary" id="ts-new">+ Feuille du jour</button></div>
+      <div class="grid g2" style="margin-bottom:1rem">${kpi(sumOf(wk.filter((f) => f.status === 'Validée')), 'Validées cette semaine', 'ok')}${kpi(sumOf(wk.filter((f) => f.status === 'Envoyée')), 'En attente du chef')}</div>
+      ${pendingQ.length ? `<div class="notice" style="margin-bottom:1rem">${pendingQ.length} feuille${pendingQ.length > 1 ? 's' : ''} enregistrée${pendingQ.length > 1 ? 's' : ''} sur l'appareil, en attente d'envoi : ${pendingQ.map((q) => esc(q.label)).join(', ')}</div>` : ''}
+      ${!S.me.technicianId ? '<div class="notice">Votre compte n\'est pas relié à une fiche technicien : prévenez l\'administrateur.</div>' : ''}
+      ${mine.map((f) => sheetCard(f)).join('') || '<div class="card"><p class="muted">Aucune feuille pour l\'instant. Touchez « + Feuille du jour » à la fin de votre journée.</p></div>'}`;
+  } else {
+    const tab = PL.tsTab || 'todo';
+    const lists = { todo: all.filter((f) => f.status === 'Envoyée'), ok: all.filter((f) => f.status === 'Validée'), no: all.filter((f) => f.status === 'Refusée'), all };
+    const decidable = lists.todo.filter(canDecideLocal);
+    v.innerHTML = `<div class="head"><h1>Pointage des heures</h1>${isAdmin() ? '<button class="btn primary" id="ts-new">+ Saisir pour un technicien</button>' : (S.me.technicianId ? '<button class="btn primary" id="ts-new">+ Ma feuille</button>' : '')}</div>
+      <div class="row" style="margin-bottom:.8rem">${[['todo', 'À valider'], ['ok', 'Validées'], ['no', 'Refusées'], ['all', 'Toutes']].map(([k, l]) => `<button class="btn sm ${tab === k ? 'dark' : ''}" data-tab="${k}">${l} (${lists[k].length})</button>`).join('')}</div>
+      ${tab === 'todo' && decidable.length > 1 ? `<button class="btn primary" id="ts-all" style="margin-bottom:.8rem">Valider les ${decidable.length} feuilles affichées</button>` : ''}
+      ${isChef() ? '<p class="muted small">Vous validez les feuilles dont toutes les heures sont sur vos chantiers. Les autres sont validées par l\'administrateur.</p>' : ''}
+      ${lists[tab].map((f) => sheetCard(f, { decide: true })).join('') || '<div class="card"><p class="muted">Aucune feuille ici.</p></div>'}`;
+    $$('[data-tab]', v).forEach((b) => (b.onclick = () => { PL.tsTab = b.dataset.tab; render(); }));
+    const allBtn = $('#ts-all', v);
+    if (allBtn) allBtn.onclick = async () => { if (!(await confirmBox(`Valider ${decidable.length} feuilles d'heures (${h(decidable.reduce((s, f) => s + f.total, 0))}) ?`, 'Tout valider'))) return; let n = 0; for (const f of decidable) { try { await api('POST', `timesheets/${encodeURIComponent(f.id)}/decision`, { decision: 'Validée' }); n++; } catch (e) { toast(e.message); } } toast(n + ' feuille(s) validée(s)'); refresh(); };
+  }
+  const nb = $('#ts-new', v); if (nb) nb.onclick = () => sheetForm(isAdmin() ? { techId: '' } : null);
+  $$('[data-ts-ok]', v).forEach((b) => (b.onclick = async () => { try { await api('POST', `timesheets/${encodeURIComponent(b.dataset.tsOk)}/decision`, { decision: 'Validée' }); toast('Feuille validée ✔ – heures ajoutées aux heures réalisées'); refresh(); } catch (e) { alertBox(e.message, 'Validation impossible'); } }));
+  $$('[data-ts-no]', v).forEach((b) => (b.onclick = () => formModal({ title: 'Refuser la feuille d\'heures', intro: '<p class="muted small">Le technicien verra le motif et pourra corriger puis renvoyer sa feuille.</p>', submitLabel: 'Refuser', fields: [{ name: 'reason', label: 'Motif du refus', type: 'textarea', required: true, placeholder: 'ex. 2 h de trop sur la tâche X, il manque le chantier de l\'après-midi…' }], onSubmit: async (vals) => { await api('POST', `timesheets/${encodeURIComponent(b.dataset.tsNo)}/decision`, { decision: 'Refusée', reason: vals.reason }); toast('Feuille refusée – le technicien est prévenu dans son application'); refresh(); } })));
+  $$('[data-ts-edit]', v).forEach((b) => (b.onclick = () => { const f = all.find((x) => x.id === b.dataset.tsEdit); if (f) sheetForm({ techId: f.techId, date: f.date, lines: f.lines, comment: f.comment }); }));
+};
+
+// ---------------- envois refusés au retour du réseau : jamais perdus ----------------
+async function rejectedLoad() { S.rejected = (await idb.get('rejected').catch(() => null)) || []; paintStatus(); }
+async function rejectedSave() { await idb.set('rejected', S.rejected); paintStatus(); }
+async function rejectedRemove(qid) { S.rejected = S.rejected.filter((x) => x.qid !== qid); await rejectedSave(); }
+ROUTES.envois = async (v) => {
+  const list = S.rejected || [];
+  v.innerHTML = `<div class="head"><h1>Envois refusés</h1></div>
+    <div class="notice" style="margin-bottom:1rem">Ces saisies faites hors ligne ont été refusées par le serveur au moment de l'envoi. Elles sont gardées sur cet appareil : corrigez-les, renvoyez-les ou abandonnez-les.</div>
+    ${list.map((x) => `<div class="card"><b>${esc(x.label)}</b><p class="muted small">Saisi le ${fmtDT(x.at)} · refusé le ${fmtDT(x.rejectedAt)}</p><p class="err small">Motif : ${esc(x.error)}</p>
+      <div class="row"><button class="btn primary sm" data-rj-fix="${esc(x.qid)}">Corriger</button><button class="btn sm" data-rj-send="${esc(x.qid)}">Renvoyer tel quel</button><button class="btn sm" data-rj-drop="${esc(x.qid)}">Abandonner</button></div></div>`).join('') || '<div class="card"><p class="muted">Aucun envoi refusé.</p></div>'}`;
+  const find = (qid) => (S.rejected || []).find((x) => x.qid === qid);
+  const resend = async (x, body) => {
+    try { await api(x.method, x.path, body); await rejectedRemove(x.qid); toast('Envoyé ✔'); await refresh(); }
+    catch (e) { x.error = e.message; x.body = body; x.rejectedAt = new Date().toISOString(); await rejectedSave(); throw e; }
+  };
+  $$('[data-rj-send]', v).forEach((b) => (b.onclick = async () => { const x = find(b.dataset.rjSend); try { await resend(x, x.body); } catch (e) { alertBox(e.message, 'Toujours refusé'); render(); } }));
+  $$('[data-rj-drop]', v).forEach((b) => (b.onclick = async () => { if (await confirmBox('Abandonner définitivement cette saisie ? Elle sera supprimée de l\'appareil.', 'Abandonner')) { await rejectedRemove(b.dataset.rjDrop); render(); } }));
+  $$('[data-rj-fix]', v).forEach((b) => (b.onclick = () => {
+    const x = find(b.dataset.rjFix);
+    if (x.kind === 'pointage') return sheetForm(x.body, { clientId: x.body.clientId, onDone: async () => { await rejectedRemove(x.qid); render(); } });
+    const skip = ['clientId', 'offline', 'photos', 'baseUpdatedAt', 'clientAt', 'lines', 'correctsId'];
+    const keys = Object.keys(x.body || {}).filter((k) => !skip.includes(k) && ['string', 'number'].includes(typeof x.body[k]));
+    formModal({ title: 'Corriger : ' + x.label, intro: `<p class="err small">Motif du refus : ${esc(x.error)}</p>`, submitLabel: 'Renvoyer', fields: keys.map((k) => ({ name: k, label: k, value: x.body[k], type: typeof x.body[k] === 'number' ? 'number' : 'text' })),
+      onSubmit: async (vals) => { const body = { ...x.body }; keys.forEach((k) => { body[k] = typeof x.body[k] === 'number' ? Number(vals[k]) : vals[k]; }); await resend(x, body); render(); } });
+  }));
+};
+
 ROUTES.profil = async (v) => {
   v.innerHTML = `<div class="head"><h1>Mon profil</h1></div><div class="card"><table><tr><th>Nom</th><td>${esc(S.me.name)}</td></tr><tr><th>Identifiant</th><td>${esc(S.me.login)}</td></tr><tr><th>Rôle</th><td>${esc(ROLE_LABEL[S.me.role])}</td></tr><tr><th>Version</th><td>${APP_VERSION}</td></tr></table>
   <div class="row" style="margin-top:.8rem"><button class="btn" id="pw">Changer mon mot de passe</button><button class="btn" id="out">Se déconnecter</button></div></div>`;

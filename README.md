@@ -1,6 +1,6 @@
 # MIMOUNI INDUSTRIEL ÉLECTRICITÉ – Logiciel de gestion (V1)
 
-Application web installable (PWA) : tableau de bord, chantiers et tâches, planning, techniciens et habilitations,
+Application web installable (PWA) : tableau de bord, chantiers et tâches, planning, pointage des heures (feuille du jour validée par le chef), techniciens et habilitations,
 présences et absences, matériel avec QR codes permanents, scanner, historique en ajout seul, rapports PDF, exports, sauvegardes.
 
 - Front : HTML/CSS/JS sans framework (`public/`), hors ligne (service worker + IndexedDB, file d'attente avec confirmation avant envoi).
