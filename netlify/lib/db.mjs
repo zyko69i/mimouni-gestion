@@ -9,11 +9,13 @@
 import { getStore } from '@netlify/blobs';
 
 const STORE = 'mimouni';
-let memo = null;
 
+// Ne JAMAIS garder le store en mémoire entre deux requêtes : le jeton d'accès
+// Netlify Blobs fourni à chaque requête expire. Un store mémorisé dans une
+// fonction restée « chaude » provoquait « Token expired » puis « Erreur serveur »
+// sur toutes les requêtes (connexion comprise) au bout de quelques dizaines de minutes.
 function store() {
-  if (!memo) memo = getStore({ name: STORE, consistency: 'strong' });
-  return memo;
+  return getStore({ name: STORE, consistency: 'strong' });
 }
 
 export const COLLECTIONS = [

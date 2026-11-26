@@ -20,6 +20,21 @@ const eqCode = () => 'EQ-' + Array.from(randomBytes(6), (b) => EQ_ALPHA[b % EQ_A
 const str = (v, max = 500) => (v == null ? '' : String(v).trim().slice(0, max));
 const date = (v) => (/^\d{4}-\d{2}-\d{2}$/.test(String(v || '')) ? String(v) : '');
 const num = (v) => { const n = Number(v); return Number.isFinite(n) && n >= 0 ? Math.round(n * 100) / 100 : 0; };
+// Contrôles de saisie (renvoient un message d'erreur en français, ou '' si tout va bien)
+const MAX_HOURS = 10000;
+const badHours = (v, label) => {
+  if (v === undefined || v === null || v === '') return '';
+  const n = Number(v);
+  if (!Number.isFinite(n)) return label + ' : nombre invalide.';
+  if (n < 0) return label + ' : une valeur négative n\'est pas possible.';
+  if (n > MAX_HOURS) return label + ' : valeur trop grande (' + MAX_HOURS + ' h maximum).';
+  return '';
+};
+const badOrder = (a, b, msg) => (a && b && b < a ? msg : '');
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+const badEmail = (v) => (str(v) && !EMAIL_RE.test(str(v)) ? 'Adresse email invalide.' : '');
+const badPhone = (v) => (str(v) && !/^[+0-9][0-9 .\-()]{5,24}$/.test(str(v)) ? 'Numéro de téléphone invalide (chiffres, espaces, + . - seulement).' : '');
+const firstErr = (...l) => l.find(Boolean) || '';
 
 const ROLES = ['admin', 'chef', 'technicien'];
 const TASK_STATUS = ['À faire', 'En cours', 'Bloquée', 'Terminée', 'Annulée'];
@@ -232,6 +247,8 @@ async function route(req) {
       if (await db.get('users', loginName)) return bad('Cet identifiant existe déjà.');
       if (!ROLES.includes(body.role) || body.role === 'admin') return bad('Rôle invalide (chef ou technicien).');
       if (String(body.password || '').length < 10) return bad('Mot de passe : au moins 10 caractères.');
+      const techLink = str(body.technicianId, 40);
+      if (techLink && (await db.list('users')).some((x) => x.technicianId === techLink)) return bad('Cette fiche technicien est déjà liée à un autre compte.');
       const u = { login: loginName, name: str(body.name, 80) || loginName, role: body.role, technicianId: str(body.technicianId, 40), hash: hashPassword(body.password), active: true, tokenVersion: 0, createdAt: now(), demo: !!body.demo };
       await db.put('users', loginName, u);
       await log(user, 'compte créé', 'utilisateur', loginName, u.role);
@@ -242,7 +259,11 @@ async function route(req) {
       if (!u) return notFound();
       if (u.login === 'admin' && (body.active === false || (body.role && body.role !== 'admin'))) return bad('Le compte administrateur principal ne peut pas être désactivé.');
       if (body.name !== undefined) u.name = str(body.name, 80);
-      if (body.technicianId !== undefined) u.technicianId = str(body.technicianId, 40);
+      if (body.technicianId !== undefined) {
+        const techLink = str(body.technicianId, 40);
+        if (techLink && (await db.list('users')).some((x) => x.login !== u.login && x.technicianId === techLink)) return bad('Cette fiche technicien est déjà liée à un autre compte.');
+        u.technicianId = techLink;
+      }
       if (body.role && ROLES.includes(body.role) && body.role !== 'admin') u.role = body.role;
       if (body.active !== undefined) { u.active = !!body.active; u.tokenVersion = (u.tokenVersion || 0) + 1; }
       if (body.password) { if (String(body.password).length < 10) return bad('Mot de passe : au moins 10 caractères.'); u.hash = hashPassword(body.password); u.tokenVersion = (u.tokenVersion || 0) + 1; }
@@ -259,6 +280,7 @@ async function route(req) {
       if (!isAdmin) return deny();
       const t = { id: 'T' + rid(8), ...techFields(body), habilitations: [], createdAt: now(), updatedAt: now() };
       if (!t.lastName) return bad('Le nom est obligatoire.');
+      { const err = firstErr(badPhone(t.phone), badEmail(t.email)); if (err) return bad(err); }
       await db.put('technicians', t.id, t);
       await log(user, 'technicien créé', 'technicien', t.id, t.firstName + ' ' + t.lastName);
       return ok(t);
@@ -267,6 +289,7 @@ async function route(req) {
       if (!isAdmin) return deny();
       const prev = await db.get('technicians', r1); if (!prev) return notFound();
       const t = { ...techFields(body, prev), updatedAt: now() };
+      { const err = firstErr(t.lastName ? '' : 'Le nom est obligatoire.', badPhone(t.phone), badEmail(t.email)); if (err) return bad(err); }
       await db.put('technicians', t.id, t);
       await log(user, 'technicien modifié', 'technicien', t.id);
       return ok(t);
@@ -276,6 +299,7 @@ async function route(req) {
       const t = await db.get('technicians', r1); if (!t) return notFound();
       const h = habFields(body);
       if (!h.expires) return bad('La date de fin de validité est obligatoire.');
+      if (badOrder(h.issued, h.expires, 'x')) return bad('La fin de validité ne peut pas être avant la date de délivrance.');
       t.habilitations = [...(t.habilitations || []), h]; t.updatedAt = now();
       await db.put('technicians', t.id, t);
       await log(user, 'habilitation ajoutée', 'technicien', t.id, h.kind + ' ' + h.symbol + ' → ' + h.expires);
@@ -292,6 +316,8 @@ async function route(req) {
       if (!isAdmin) return deny();
       const c = { id: 'C' + rid(8), name: str(body.name, 120), address: str(body.address, 250), client: str(body.client, 120), chefId: str(body.chefId, 40), start: date(body.start), endPlanned: date(body.endPlanned), status: CHANTIER_STATUS.includes(body.status) ? body.status : 'En préparation', team: Array.isArray(body.team) ? body.team.map((x) => str(x, 20)) : [], description: str(body.description, 2000), createdAt: now(), updatedAt: now() };
       if (!c.name) return bad('Le nom du chantier est obligatoire.');
+      if (badOrder(c.start, c.endPlanned, 'x')) return bad('La date de fin prévue ne peut pas être avant la date de début.');
+      if (sc.chantiers.some((x) => x.name.toLowerCase() === c.name.toLowerCase())) return bad('Un chantier porte déjà ce nom. Ajoutez une précision (lieu, phase…).');
       await db.put('chantiers', c.id, c);
       await log(user, 'chantier créé', 'chantier', c.id, c.name);
       return ok(c);
@@ -304,6 +330,8 @@ async function route(req) {
         for (const k of ['start', 'endPlanned']) if (body[k] !== undefined) c[k] = date(body[k]);
         if (body.status && CHANTIER_STATUS.includes(body.status)) c.status = body.status;
         if (Array.isArray(body.team)) c.team = body.team.map((x) => str(x, 20));
+        if (!c.name) return bad('Le nom du chantier est obligatoire.');
+        if (badOrder(c.start, c.endPlanned, 'x')) return bad('La date de fin prévue ne peut pas être avant la date de début.');
       } else if (user.role === 'chef') {
         // Le chef peut seulement proposer la clôture et gérer l'équipe de SES chantiers
         if (body.status === 'Clôture proposée') c.status = 'Clôture proposée';
@@ -318,6 +346,7 @@ async function route(req) {
     if (r2 === 'notes' && m === 'GET') return ok(await db.listHistory('CH-' + r1));
     if (r2 === 'notes' && m === 'POST') {
       // Photos / documents / remarques du chantier (ajout seul)
+      if (!str(body.content) && !str(body.title) && !(Array.isArray(body.photos) && body.photos.length)) return bad('Ajoutez au moins un titre, un texte ou une photo.');
       const photos = await savePhotos(body.photos);
       if (user.role === 'technicien' && !photos.length) return deny('Le technicien peut ajouter uniquement des photos.');
       const e = { id: rid(12), equipId: 'CH-' + r1, chantierId: r1, type: photos.length ? 'photo' : 'remarque', content: str(body.content, 4000), title: str(body.title, 150), photos, author: user.login, authorName: user.name, at: now() };
@@ -335,6 +364,7 @@ async function route(req) {
     if (m === 'POST' && !r1) {
       if (user.role === 'technicien') return deny();
       if (!sc.chantierIds.has(body.chantierId)) return deny('Chantier non autorisé.');
+      { const err = firstErr(badHours(body.plannedHours, 'Heures prévues'), badHours(body.doneHours, 'Heures réalisées'), badOrder(date(body.start), date(body.end), 'L\'échéance ne peut pas être avant la date de début.')); if (err) return bad(err); }
       const t = { id: 'K' + rid(8), chantierId: body.chantierId, title: str(body.title, 200), status: TASK_STATUS.includes(body.status) ? body.status : 'À faire', plannedHours: num(body.plannedHours), doneHours: num(body.doneHours), start: date(body.start), end: date(body.end), assignee: str(body.assignee, 20), requiredHab: str(body.requiredHab, 40), blockReason: str(body.blockReason, 300), createdAt: now(), updatedAt: now(), history: [] };
       if (!t.title) return bad('Le titre est obligatoire.');
       await db.put('tasks', t.id, t);
@@ -346,6 +376,7 @@ async function route(req) {
       if (!sc.chantierIds.has(t.chantierId)) return deny();
       const isTech = user.role === 'technicien';
       if (isTech && t.assignee !== user.technicianId) return deny('Vous ne pouvez modifier que vos propres tâches.');
+      { const err = firstErr(badHours(body.doneHours, 'Heures réalisées'), isTech ? '' : badHours(body.plannedHours, 'Heures prévues'), isTech ? '' : badOrder(body.start !== undefined ? date(body.start) : t.start, body.end !== undefined ? date(body.end) : t.end, 'L\'échéance ne peut pas être avant la date de début.')); if (err) return bad(err); }
       const conflict = body.baseUpdatedAt && body.baseUpdatedAt !== t.updatedAt;
       const before = { status: t.status, doneHours: t.doneHours, plannedHours: t.plannedHours, by: t.lastBy || '', at: t.updatedAt };
       if (body.status) {
@@ -415,6 +446,10 @@ async function route(req) {
       } else if (!sc.techIds.has(techId)) return deny('Ce technicien ne fait pas partie de votre équipe.');
       const a = { id: 'B' + rid(8), techId, type, start: date(body.start), end: date(body.end) || date(body.start), time: str(body.time, 10), motif: str(body.motif, 500), status: isAdmin ? 'Validée' : status, author: user.login, createdAt: now(), history: [] };
       if (!a.start) return bad('La date est obligatoire.');
+      if (badOrder(a.start, a.end, 'x')) return bad('La date de fin ne peut pas être avant la date de début.');
+      if (a.type === 'retard' && !a.time) return bad('Indiquez l\'heure d\'arrivée pour un retard.');
+      const all = await db.list('absences');
+      if (all.some((x) => x.techId === a.techId && x.type === a.type && x.status !== 'Refusée' && x.start <= a.end && (x.end || x.start) >= a.start)) return bad('Une absence du même type existe déjà sur ces dates pour ce technicien.');
       await db.put('absences', a.id, a);
       await log(user, 'absence signalée', 'absence', a.id, techId);
       return ok(redactAbsence(a, user));
@@ -426,6 +461,7 @@ async function route(req) {
       if (body.type && ABS_TYPES.includes(body.type)) a.type = body.type;
       if (body.start) a.start = date(body.start);
       if (body.end) a.end = date(body.end);
+      if (badOrder(a.start, a.end, 'x')) return bad('La date de fin ne peut pas être avant la date de début.');
       if (body.motif !== undefined) a.motif = str(body.motif, 500);
       if (['Signalée', 'Demandée', 'Validée', 'Refusée'].includes(body.status)) a.status = body.status;
       await db.put('absences', a.id, a);
@@ -483,6 +519,7 @@ async function route(req) {
         if (type === 'correction' && user.role === 'technicien' && original.author !== user.login) return deny('Un technicien corrige seulement ses propres entrées.');
         if (!str(body.reason)) return bad('Le motif est obligatoire.');
       }
+      { const err = badHours(body.duration, 'Durée'); if (err) return bad(err); }
       // idempotence pour les envois hors ligne rejoués
       const clientId = str(body.clientId, 40);
       if (clientId) {
@@ -518,6 +555,7 @@ async function route(req) {
       const fields = ['legalForm', 'address', 'zipCity', 'phone', 'emergencyPhone', 'email', 'website', 'siret', 'vat', 'ape', 'insurance', 'certifications', 'director', 'hours'];
       const c = { name: COMPANY, activity: 'Électricité industrielle' };
       for (const f of fields) c[f] = str(body[f], 300);
+      { const siret = c.siret.replace(/\s/g, ''); const err = firstErr(badEmail(c.email), badPhone(c.phone), badPhone(c.emergencyPhone), siret && !/^\d{14}$/.test(siret) ? 'SIRET invalide : 14 chiffres attendus.' : ''); if (err) return bad(err); }
       c.updatedAt = now();
       await db.put('settings', 'company', c);
       await log(user, 'fiche entreprise modifiée', 'réglages', 'company');
