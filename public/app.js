@@ -577,6 +577,8 @@ function seniority(entryDate) {
   const days = Math.floor((now - start) / 86400000);
   return days <= 0 ? 'Aujourd\'hui' : `${days} jour${days > 1 ? 's' : ''}`;
 }
+
+function presentToday() {
   const day = todayISO();
   const techs = D().technicians.filter((t) => t.active !== false);
   const assignedIds = new Set(D().assignments.filter((a) => a.date === day).map((a) => a.techId));
