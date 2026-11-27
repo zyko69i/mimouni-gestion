@@ -80,7 +80,22 @@ h3 { font-size: 1.05rem; margin: 0.3rem 0 0.5rem; font-weight: 600; }
 .kpi:hover { transform: translateY(-2px); box-shadow: var(--ombre-hover); }
 
 /* Layout */
-.layout { display: flex; min-height: 100vh; }
+html, body {
+  height: 100%;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.layout {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+main {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 8rem !important;
+}
 .side {
   display: flex;
   flex-direction: column;
