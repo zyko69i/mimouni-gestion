@@ -1509,15 +1509,15 @@ function openAI() {
   if (document.querySelector('.ai-panel')) return;
   const panel = document.createElement('div');
   panel.className = 'ai-panel';
-  panel.style.cssText = 'position:fixed;bottom:5.5rem;right:1rem;width:min(360px,calc(100vw - 1.5rem));height:min(480px,68vh);background:#fff;border-radius:18px;box-shadow:0 8px 32px rgba(23,54,93,0.15);z-index:91;display:flex;flex-direction:column;overflow:hidden;border:1px solid #E2E8F0;';
+  panel.style.cssText = 'position:fixed;bottom:5.5rem;right:1rem;width:min(340px,calc(100vw - 1.5rem));height:min(500px,72vh);background:#0F172A;border-radius:20px;box-shadow:0 12px 40px rgba(0,0,0,0.35);z-index:91;display:flex;flex-direction:column;overflow:hidden;';
   panel.innerHTML = `
-    <div style="background:#17365D;color:#fff;padding:0.75rem 1rem;display:flex;justify-content:space-between;align-items:center"><b>Grok – Assistant MIMOUNI</b><button id="ai-close" style="background:none;border:none;color:#fff;font-size:1.4rem;cursor:pointer">×</button></div>
-    <div id="ai-msgs" style="flex:1;overflow-y:auto;padding:0.8rem;font-size:0.9rem"></div>
-    <div style="padding:0.5rem;border-top:1px solid #e2e8f0;display:flex;gap:0.3rem;align-items:center">
-      <button id="ai-mic" title="Parler" style="background:#F1F5F9;border:none;border-radius:10px;width:36px;height:36px;font-size:1.1rem;cursor:pointer;flex-shrink:0">🎤</button>
+    <div style="background:#0F172A;color:#fff;padding:0.7rem 1rem;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #1E293B"><b>Assistant MIMOUNI</b><button id="ai-close" style="background:none;border:none;color:#94A3B8;font-size:1.4rem;cursor:pointer">×</button></div>
+    <div id="ai-msgs" style="flex:1;overflow-y:auto;padding:1rem;font-size:0.9rem"></div>
+    <div style="padding:0.6rem;border-top:1px solid #1E293B;display:flex;gap:0.3rem;align-items:center;background:#0F172A">
+      <button id="ai-mic" title="Parler" style="background:#1E293B;border:none;border-radius:10px;width:36px;height:36px;font-size:1.1rem;cursor:pointer;flex-shrink:0;color:#fff">🎤</button>
       <input type="file" id="ai-photo" accept="image/*" capture="environment" style="display:none">
-      <button id="ai-cam" title="Photo" style="background:#F1F5F9;border:none;border-radius:10px;width:36px;height:36px;font-size:1.1rem;cursor:pointer;flex-shrink:0">📷</button>
-      <input id="ai-input" placeholder="Écrivez…" style="flex:1;padding:0.5rem;border:1px solid #cbd5e1;border-radius:10px;font-size:16px;min-width:0">
+      <button id="ai-cam" title="Photo" style="background:#1E293B;border:none;border-radius:10px;width:36px;height:36px;font-size:1.1rem;cursor:pointer;flex-shrink:0;color:#fff">📷</button>
+      <input id="ai-input" placeholder="Écrivez…" style="flex:1;padding:0.5rem;border:1px solid #334155;border-radius:10px;font-size:16px;min-width:0;background:#1E293B;color:#fff">
       <button id="ai-send" class="btn primary" style="padding:0.5rem 0.7rem;flex-shrink:0;font-size:0.85rem">Envoyer</button>
     </div>`;
   document.body.appendChild(panel);
@@ -1584,13 +1584,13 @@ function openAI() {
     setTimeout(() => addMsg('J’ai bien reçu la photo. Pour l’instant je peux analyser les données textuelles de l’application. Dites-moi ce que vous voulez que je fasse avec cette image.', false), 400);
   };
   aiHistory.forEach(m => addMsg(m.text, m.role === 'user'));
-  if (!aiHistory.length) addMsg('Bonjour ! Je suis Grok dans votre application MIMOUNI. Vous pouvez m’écrire, me parler ou m’envoyer une photo. Je connais vos techniciens, chantiers, absences et alertes.', false);
+  if (!aiHistory.length) addMsg('Comment puis-je vous aider aujourd’hui ?', false);
 }
 function addMsg(text, me) {
   const box = document.getElementById('ai-msgs');
   if (!box) return;
   const div = document.createElement('div');
-  div.style.cssText = `margin:0.3rem 0;padding:0.5rem 0.7rem;border-radius:14px;max-width:85%;white-space:pre-wrap;font-size:0.88rem;line-height:1.4;${me ? 'background:#17365D;color:#fff;margin-left:auto' : 'background:#F8FAFC;color:#1E293B;border:1px solid #E2E8F0'}`;
+  div.style.cssText = `margin:0.3rem 0;padding:0.5rem 0.7rem;border-radius:14px;max-width:85%;white-space:pre-wrap;font-size:0.88rem;line-height:1.4;${me ? 'background:#2563EB;color:#fff;margin-left:auto' : 'background:#1E293B;color:#E2E8F0'}`;
   div.textContent = text;
   box.appendChild(div);
   box.scrollTop = box.scrollHeight;
