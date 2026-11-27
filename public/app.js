@@ -1571,7 +1571,7 @@ async function aiReply(q) {
   const d = D();
   const context = `Données actuelles : ${d.technicians.length} techniciens, ${d.chantiers.length} chantiers (${d.chantiers.filter(c => c.status === 'En cours').length} en cours), ${d.absences.length} absences.`;
   try {
-    const r = await fetch('/.netlify/functions/groq', {
+    const r = await fetch('/api/groq', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ messages: [
