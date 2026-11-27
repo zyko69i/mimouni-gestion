@@ -565,28 +565,32 @@ ROUTES.home = async (v) => {
   const absMonth = d.absences.filter((a) => (a.start || '').slice(0, 7) === month || (a.end || '').slice(0, 7) === month);
   const absCount = {}; absMonth.forEach((a) => { const l = absLabel(a); absCount[l] = (absCount[l] || 0) + 1; });
   const conflicts = allConflicts();
+  const eqCount = d.equipment.length;
+  const pendingInter = (d.recent || []).filter(e => e.type === 'intervention' && !e.done).length || pendingTasks.length;
   v.innerHTML = `
-  <div class="head"><h1>Tableau de bord</h1><span class="muted small">${isChef() ? 'Vos chantiers et votre équipe' : 'Vue globale'} – ${fmtD(day)}</span></div>
+  <div class="head"><h1>Tableau de bord</h1><span class="muted small">${isChef() ? 'Vos chantiers et votre équipe' : 'Vue globale de l\'entreprise'} – ${fmtD(day)}</span></div>
   ${(() => { const n = (d.timesheets || []).filter((f) => f.status === 'Envoyée' && canDecideLocal(f)).length; return n ? `<div class="notice" style="margin-bottom:1rem">${ICON.clock} <b>${n} feuille${n > 1 ? 's' : ''} d'heures à valider</b> – <a href="#/pointage">ouvrir le pointage</a></div>` : ''; })()}
   ${!d.chantiers.length && isAdmin() ? `<div class="notice" style="margin-bottom:1rem">Aucune donnée pour l'instant. Créez vos techniciens et chantiers, ou chargez des données d'exemple dans <a href="#/reglages">Réglages</a>.</div>` : ''}
-  <div class="grid g4" style="margin-bottom:1rem">
+  <div class="grid g4" style="margin-bottom:1.5rem">
+    ${kpi(pr.total, 'Techniciens')}
     ${kpi(active.length, 'Chantiers actifs')}
-    ${kpi(late.length, 'Chantiers en retard', late.length ? 'red' : 'ok')}
-    ${kpi(blocked.length, 'Tâches bloquantes', blocked.length ? 'red' : 'ok')}
+    ${kpi(pendingTasks.length + S.queue.length, 'Interventions en attente', (pendingTasks.length + S.queue.length) ? 'red' : 'ok')}
+    ${kpi(habs.length + late.length + blocked.length, 'Alertes importantes', (habs.length + late.length + blocked.length) ? 'red' : 'ok')}
+  </div>
+  <div class="grid g3" style="margin-bottom:1.5rem">
     ${kpi(`${pr.present}/${pr.total}`, 'Présents aujourd\'hui')}
+    ${kpi(late.length, 'Chantiers en retard', late.length ? 'red' : 'ok')}
     ${kpi(habs.length, 'Habilitations à renouveler', habs.length ? 'red' : 'ok')}
-    ${kpi(pendingTasks.length + S.queue.length, 'Interventions en attente', pendingTasks.length + S.queue.length ? 'red' : 'ok')}
     ${kpi(h(planned) + ' / ' + h(real), 'Heures prévues / réalisées')}
-    ${kpi((gap > 0 ? '▲ +' : gap < 0 ? '▼ ' : '') + h(gap), 'Écart d\'heures (tâches terminées)', gap > 0 ? 'red' : 'ok')}
+    ${kpi(eqCount, 'Équipements')}
+    ${kpi(blocked.length, 'Tâches bloquantes', blocked.length ? 'red' : 'ok')}
   </div>
   <div class="grid g2">
-    <div class="card"><h2>Avancement par chantier</h2>${hbars(d.chantiers.filter((c) => c.status !== 'Clôturé').map((c) => ({ l: c.name, v: progressOf(c.id).pct, late: isLate(c) })).sort((a, b) => b.v - a.v))}</div>
-    <div class="card"><h2>Répartition des tâches</h2>${donut(['À faire', 'En cours', 'Bloquée', 'Terminée'].map((s, i) => ({ l: s, v: tasks.filter((t) => t.status === s).length, c: ['#C9CBCE', '#111111', '#C8102E', '#1E9E5A'][i] })))}</div>
-    <div class="card"><h2>Heures prévues et réalisées par chantier</h2>${groupedBars(d.chantiers.filter((c) => progressOf(c.id).total).map((c) => ({ l: c.name, a: progressOf(c.id).total, b: progressOf(c.id).real })))}</div>
-    <div class="card"><h2>Absences du mois</h2>${donut(Object.entries(absCount).map(([l, n]) => ({ l, v: n })))}${isChef() ? '<p class="muted small">Le motif des arrêts maladie n\'est visible que par l\'administrateur.</p>' : ''}</div>
+    <div class="card"><h2>Avancement des chantiers</h2>${hbars(d.chantiers.filter((c) => c.status !== 'Clôturé').map((c) => ({ l: c.name, v: progressOf(c.id).pct, late: isLate(c) })).sort((a, b) => b.v - a.v))}</div>
+    <div class="card"><h2>Répartition des tâches</h2>${donut(['À faire', 'En cours', 'Bloquée', 'Terminée'].map((s, i) => ({ l: s, v: tasks.filter((t) => t.status === s).length, c: ['#94A3B8', '#17365D', '#DC2626', '#16A34A'][i] })))}</div>
+    <div class="card"><h2>Heures prévues et réalisées</h2>${groupedBars(d.chantiers.filter((c) => progressOf(c.id).total).map((c) => ({ l: c.name, a: progressOf(c.id).total, b: progressOf(c.id).real })))}</div>
+    <div class="card"><h2>Centre d'alertes</h2>${habs.length || late.length || blocked.length ? `<div class="list">${habs.slice(0,3).map(({ t, hb, st }) => `<div class="item"><span>Habilitation – ${esc(t.firstName + ' ' + t.lastName)}</span><span class="pill ${st.cls}">${esc(st.label)}</span></div>`).join('')}${late.slice(0,2).map(c => `<div class="item"><span>Chantier en retard – ${esc(c.name)}</span><span class="pill red">Retard</span></div>`).join('')}${blocked.slice(0,2).map(t => `<div class="item"><span>Tâche bloquante – ${esc(t.title)}</span><span class="pill red">Bloquée</span></div>`).join('')}</div>` : '<p class="muted">Aucune alerte prioritaire.</p>'}</div>
     <div class="card"><h2>Habilitations à renouveler</h2>${habs.length ? `<div class="list">${habs.map(({ t, hb, st }) => `<div class="item"><a href="#/technicien/${t.id}">${esc(t.firstName + ' ' + t.lastName)}</a><span>${esc(hb.symbol || hb.kind)} – ${fmtD(hb.expires)} <span class="pill ${st.cls}">${esc(st.label)}</span></span></div>`).join('')}</div>` : '<p class="muted">Aucune habilitation à renouveler dans les 60 jours.</p>'}</div>
-    <div class="card"><h2>Tâches bloquantes et retards</h2>${[...blocked, ...pendingTasks.filter((t) => t.status !== 'Bloquée')].map((t) => `<div class="list"><div class="item"><a href="#/chantier/${t.chantierId}">${esc(t.title)}</a><span class="small">${statusPill(t.status)} ${t.status === 'Bloquée' ? esc(t.blockReason) : 'échéance ' + fmtD(t.end)}</span></div></div>`).join('') || '<p class="muted">Rien à signaler.</p>'}</div>
-    <div class="card"><h2>Conflits de planning</h2>${conflicts.length ? conflicts.slice(0, 8).map(({ a, c }) => `<div class="list"><div class="item"><span>${esc(techName(a.techId))} – ${fmtD(a.date)}</span><span class="pill red">${esc(c[0])}</span></div></div>`).join('') : '<p class="muted">Aucun conflit.</p>'}</div>
     <div class="card"><h2>Activité récente</h2>${recentFeed()}</div>
   </div>`;
 };
