@@ -660,7 +660,17 @@ async function viewMyActivity(v) {
 // ---------------- Chantiers ----------------
 ROUTES.chantiers = async (v) => {
   const list = D().chantiers.slice().sort((a, b) => (a.status === 'Clôturé') - (b.status === 'Clôturé') || a.name.localeCompare(b.name));
-  v.innerHTML = `<div class="head"><h1>Chantiers</h1>${isAdmin() ? '<button class="btn primary" id="new-ch">+ Nouveau chantier</button>' : ''}</div>
+  const total = list.length;
+  const enCours = list.filter(c => c.status === 'En cours').length;
+  const termines = list.filter(c => c.status === 'Clôturé').length;
+  const enRetard = list.filter(isLate).length;
+  v.innerHTML = `<div class="head"><h1>Gestion des chantiers</h1>${isAdmin() ? '<button class="btn primary" id="new-ch">+ Nouveau chantier</button>' : ''}</div>
+  <div class="grid g4" style="margin-bottom:1.5rem">
+    ${kpi(total, 'Total chantiers')}
+    ${kpi(enCours, 'En cours')}
+    ${kpi(termines, 'Terminés', 'ok')}
+    ${kpi(enRetard, 'En retard', enRetard ? 'red' : 'ok')}
+  </div>
   ${list.length ? `<div class="grid g3">${list.map((c) => { const p = progressOf(c.id); const late = isLate(c); return `<a class="card" href="#/chantier/${c.id}" style="text-decoration:none;color:inherit;display:block"><div class="row" style="justify-content:space-between"><b>${esc(c.name)}</b>${statusPill(c.status)}</div><p class="muted small" style="margin:.3rem 0">${esc(c.client || '')} · ${esc(c.address || '')}</p><div class="bar"><i style="width:${p.pct}%"></i></div><div class="row small" style="justify-content:space-between;margin-top:.3rem"><span><b>${String(p.pct).replace('.', ',')} %</b> d'avancement</span>${late ? '<span class="pill red">En retard</span>' : ''}${demoTag(c)}</div></a>`; }).join('')}</div>` : '<div class="card"><p class="muted">Aucun chantier visible.</p></div>'}`;
   const b = $('#new-ch'); if (b) b.onclick = () => chantierForm();
 };
