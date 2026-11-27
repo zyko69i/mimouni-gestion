@@ -1513,12 +1513,12 @@ function openAI() {
   panel.innerHTML = `
     <div style="background:#17365D;color:#fff;padding:0.75rem 1rem;display:flex;justify-content:space-between;align-items:center"><b>Grok – Assistant MIMOUNI</b><button id="ai-close" style="background:none;border:none;color:#fff;font-size:1.4rem;cursor:pointer">×</button></div>
     <div id="ai-msgs" style="flex:1;overflow-y:auto;padding:0.8rem;font-size:0.9rem"></div>
-    <div style="padding:0.6rem;border-top:1px solid #e2e8f0;display:flex;gap:0.4rem;align-items:center">
-      <button id="ai-mic" title="Parler" style="background:#F1F5F9;border:none;border-radius:10px;width:40px;height:40px;font-size:1.2rem;cursor:pointer">🎤</button>
+    <div style="padding:0.5rem;border-top:1px solid #e2e8f0;display:flex;gap:0.3rem;align-items:center">
+      <button id="ai-mic" title="Parler" style="background:#F1F5F9;border:none;border-radius:10px;width:36px;height:36px;font-size:1.1rem;cursor:pointer;flex-shrink:0">🎤</button>
       <input type="file" id="ai-photo" accept="image/*" capture="environment" style="display:none">
-      <button id="ai-cam" title="Photo" style="background:#F1F5F9;border:none;border-radius:10px;width:40px;height:40px;font-size:1.2rem;cursor:pointer">📷</button>
-      <input id="ai-input" placeholder="Écrivez ou parlez…" style="flex:1;padding:0.55rem;border:1px solid #cbd5e1;border-radius:10px;font-size:16px">
-      <button id="ai-send" class="btn primary" style="padding:0.55rem 0.9rem">Envoyer</button>
+      <button id="ai-cam" title="Photo" style="background:#F1F5F9;border:none;border-radius:10px;width:36px;height:36px;font-size:1.1rem;cursor:pointer;flex-shrink:0">📷</button>
+      <input id="ai-input" placeholder="Écrivez…" style="flex:1;padding:0.5rem;border:1px solid #cbd5e1;border-radius:10px;font-size:16px;min-width:0">
+      <button id="ai-send" class="btn primary" style="padding:0.5rem 0.7rem;flex-shrink:0;font-size:0.85rem">Envoyer</button>
     </div>`;
   document.body.appendChild(panel);
   document.getElementById('ai-close').onclick = () => panel.remove();
@@ -1620,7 +1620,11 @@ ${context}` },
     });
     if (r.ok) {
       const data = await r.json();
-      return data.choices?.[0]?.message?.content || 'Réponse vide.';
+      const content = data.choices?.[0]?.message?.content;
+      if (content) return content.trim();
+      return 'Réponse reçue mais vide. Détail : ' + JSON.stringify(data).slice(0, 200);
+    } else {
+      return 'Erreur API (' + r.status + ')';
     }
   } catch (e) {}
   const low = q.toLowerCase();
