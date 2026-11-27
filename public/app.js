@@ -888,7 +888,18 @@ function openInterventionForm() {
       <div><label style="display:block;font-size:0.85rem;margin-bottom:0.25rem">Nom de l'intervention</label><input name="name" required style="width:100%;padding:0.5rem;border:1px solid #D1D5DB;border-radius:8px;font-size:16px"></div>
       <div><label style="display:block;font-size:0.85rem;margin-bottom:0.25rem">Chantier / Client</label><select name="chantierId" style="width:100%;padding:0.5rem;border:1px solid #D1D5DB;border-radius:8px;font-size:16px"><option value="">— Aucun —</option>${chs.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('')}</select></div>
       <div><label style="display:block;font-size:0.85rem;margin-bottom:0.25rem">Date</label><input type="date" name="date" value="${todayISO()}" required style="width:100%;padding:0.5rem;border:1px solid #D1D5DB;border-radius:8px;font-size:16px"></div>
-      <div><label style="display:block;font-size:0.85rem;margin-bottom:0.25rem">Créneau</label><input name="slot" placeholder="ex: 08:00-12:00" style="width:100%;padding:0.5rem;border:1px solid #D1D5DB;border-radius:8px;font-size:16px"></div>
+      <div><label style="display:block;font-size:0.85rem;margin-bottom:0.25rem">Créneau</label>
+        <div style="display:flex;gap:0.4rem;margin-bottom:0.4rem">
+          <button type="button" class="btn sm" data-slot="08:00-12:00">Demi-journée (4h)</button>
+          <button type="button" class="btn sm" data-slot="08:00-17:00">Journée (8h)</button>
+        </div>
+        <div style="display:flex;gap:0.4rem;align-items:center">
+          <input type="time" id="slot-start" value="08:00" style="padding:0.45rem;border:1px solid #D1D5DB;border-radius:8px;font-size:16px">
+          <span>à</span>
+          <input type="time" id="slot-end" value="12:00" style="padding:0.45rem;border:1px solid #D1D5DB;border-radius:8px;font-size:16px">
+        </div>
+        <input type="hidden" name="slot" id="slot-val" value="08:00-12:00">
+      </div>
       <div><label style="display:block;font-size:0.85rem;margin-bottom:0.25rem">Technicien</label><select name="techId" style="width:100%;padding:0.5rem;border:1px solid #D1D5DB;border-radius:8px;font-size:16px">${techs.map(t => `<option value="${t.id}">${esc(t.firstName + ' ' + t.lastName)}</option>`).join('')}</select></div>
       <div><label style="display:block;font-size:0.85rem;margin-bottom:0.25rem">Statut</label><select name="status" style="width:100%;padding:0.5rem;border:1px solid #D1D5DB;border-radius:8px;font-size:16px"><option>Planifié</option><option>En attente</option><option>Terminé</option></select></div>
       <div class="actions"><button type="button" class="btn" data-close>Annuler</button><button class="btn primary" type="submit">Enregistrer</button></div>
@@ -899,6 +910,19 @@ function openInterventionForm() {
     await api('POST', 'assignments', { techId: fd.get('techId'), chantierId: fd.get('chantierId') || null, date: fd.get('date'), slot: fd.get('slot') || '', status: fd.get('status'), name: fd.get('name') });
     m.remove(); await loadData(); render();
   };
+  document.querySelectorAll('[data-slot]').forEach(b => b.onclick = () => {
+    const [s, e] = b.dataset.slot.split('-');
+    document.getElementById('slot-start').value = s;
+    document.getElementById('slot-end').value = e;
+    document.getElementById('slot-val').value = b.dataset.slot;
+  });
+  const updateSlot = () => {
+    const s = document.getElementById('slot-start').value;
+    const e = document.getElementById('slot-end').value;
+    document.getElementById('slot-val').value = s + '-' + e;
+  };
+  document.getElementById('slot-start').onchange = updateSlot;
+  document.getElementById('slot-end').onchange = updateSlot;
 }
 ROUTES.techniciens = async (v) => {
   if (isTech()) { location.hash = '#/technicien/' + S.me.technicianId; return; }
