@@ -1509,16 +1509,16 @@ function openAI() {
   if (document.querySelector('.ai-panel')) return;
   const panel = document.createElement('div');
   panel.className = 'ai-panel';
-  panel.style.cssText = 'position:fixed;bottom:5.5rem;right:1rem;width:min(340px,calc(100vw - 1.5rem));height:min(500px,72vh);background:#0F172A;border-radius:20px;box-shadow:0 12px 40px rgba(0,0,0,0.35);z-index:91;display:flex;flex-direction:column;overflow:hidden;';
+  panel.style.cssText = 'position:fixed;bottom:5.5rem;right:1rem;width:min(360px,calc(100vw - 1.5rem));height:min(520px,75vh);background:#FFFFFF;border-radius:16px;box-shadow:0 8px 30px rgba(0,0,0,0.12);z-index:91;display:flex;flex-direction:column;overflow:hidden;border:1px solid #E5E7EB;';
   panel.innerHTML = `
-    <div style="background:#0F172A;color:#fff;padding:0.7rem 1rem;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #1E293B"><b>Assistant MIMOUNI</b><button id="ai-close" style="background:none;border:none;color:#94A3B8;font-size:1.4rem;cursor:pointer">×</button></div>
-    <div id="ai-msgs" style="flex:1;overflow-y:auto;padding:1rem;font-size:0.9rem"></div>
-    <div style="padding:0.6rem;border-top:1px solid #1E293B;display:flex;gap:0.3rem;align-items:center;background:#0F172A">
-      <button id="ai-mic" title="Parler" style="background:#1E293B;border:none;border-radius:10px;width:36px;height:36px;font-size:1.1rem;cursor:pointer;flex-shrink:0;color:#fff">🎤</button>
+    <div style="background:#17365D;color:#fff;padding:0.65rem 1rem;display:flex;justify-content:space-between;align-items:center"><span style="font-weight:600;font-size:0.95rem">Assistant MIMOUNI</span><button id="ai-close" style="background:none;border:none;color:#CBD5E1;font-size:1.3rem;cursor:pointer;line-height:1">×</button></div>
+    <div id="ai-msgs" style="flex:1;overflow-y:auto;padding:0.75rem;background:#F9FAFB"></div>
+    <div style="padding:0.5rem;border-top:1px solid #E5E7EB;display:flex;gap:0.35rem;align-items:center;background:#fff">
+      <button id="ai-mic" title="Parler" style="background:#F3F4F6;border:none;border-radius:8px;width:34px;height:34px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#374151" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v4M8 23h8"/></svg></button>
       <input type="file" id="ai-photo" accept="image/*" capture="environment" style="display:none">
-      <button id="ai-cam" title="Photo" style="background:#1E293B;border:none;border-radius:10px;width:36px;height:36px;font-size:1.1rem;cursor:pointer;flex-shrink:0;color:#fff">📷</button>
-      <input id="ai-input" placeholder="Écrivez…" style="flex:1;padding:0.5rem;border:1px solid #334155;border-radius:10px;font-size:16px;min-width:0;background:#1E293B;color:#fff">
-      <button id="ai-send" class="btn primary" style="padding:0.5rem 0.7rem;flex-shrink:0;font-size:0.85rem">Envoyer</button>
+      <button id="ai-cam" title="Photo" style="background:#F3F4F6;border:none;border-radius:8px;width:34px;height:34px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#374151" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg></button>
+      <input id="ai-input" placeholder="Écrivez votre message…" style="flex:1;padding:0.45rem 0.6rem;border:1px solid #D1D5DB;border-radius:8px;font-size:16px;min-width:0;outline:none">
+      <button id="ai-send" style="background:#2563EB;color:#fff;border:none;border-radius:8px;padding:0.45rem 0.7rem;font-size:0.82rem;font-weight:500;cursor:pointer;flex-shrink:0">Envoyer</button>
     </div>`;
   document.body.appendChild(panel);
   document.getElementById('ai-close').onclick = () => panel.remove();
@@ -1590,7 +1590,7 @@ function addMsg(text, me) {
   const box = document.getElementById('ai-msgs');
   if (!box) return;
   const div = document.createElement('div');
-  div.style.cssText = `margin:0.3rem 0;padding:0.5rem 0.7rem;border-radius:14px;max-width:85%;white-space:pre-wrap;font-size:0.88rem;line-height:1.4;${me ? 'background:#2563EB;color:#fff;margin-left:auto' : 'background:#1E293B;color:#E2E8F0'}`;
+  div.style.cssText = `margin:0.25rem 0;padding:0.45rem 0.65rem;border-radius:12px;max-width:82%;white-space:pre-wrap;font-size:0.87rem;line-height:1.35;${me ? 'background:#2563EB;color:#fff;margin-left:auto' : 'background:#fff;color:#1F2937;border:1px solid #E5E7EB'}`;
   div.textContent = text;
   box.appendChild(div);
   box.scrollTop = box.scrollHeight;
