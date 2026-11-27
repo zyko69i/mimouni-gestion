@@ -1493,7 +1493,7 @@ function initAI() {
   if (document.getElementById('ai-btn')) return;
   const btn = document.createElement('button');
   btn.id = 'ai-btn';
-  btn.innerHTML = `<svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="#fff" stroke-width="1.8"><path d="M12 2a7 7 0 0 1 7 7c0 2.5-1.3 4.7-3.2 6L12 22l-3.8-7C6.3 13.7 5 11.5 5 9a7 7 0 0 1 7-7z"/><circle cx="12" cy="9" r="2.5"/></svg>`;
+  btn.innerHTML = `<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="#fff" stroke-width="1.8"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M8 10h8M8 14h5"/></svg>`;
   btn.title = 'Assistant Grok';
   btn.style.cssText = 'position:fixed;bottom:1.5rem;right:1.5rem;width:56px;height:56px;border-radius:50%;background:#2563EB;color:#fff;border:none;font-size:1.6rem;box-shadow:0 4px 16px rgba(37,99,235,0.35);z-index:90;cursor:pointer;';
   document.body.appendChild(btn);
@@ -1509,7 +1509,7 @@ function openAI() {
   if (document.querySelector('.ai-panel')) return;
   const panel = document.createElement('div');
   panel.className = 'ai-panel';
-  panel.style.cssText = 'position:fixed;bottom:5rem;right:1rem;width:min(400px,calc(100vw - 1.5rem));height:min(520px,70vh);background:#fff;border-radius:16px;box-shadow:0 12px 40px rgba(0,0,0,0.2);z-index:91;display:flex;flex-direction:column;overflow:hidden;';
+  panel.style.cssText = 'position:fixed;bottom:5.5rem;right:1rem;width:min(360px,calc(100vw - 1.5rem));height:min(480px,68vh);background:#fff;border-radius:18px;box-shadow:0 8px 32px rgba(23,54,93,0.15);z-index:91;display:flex;flex-direction:column;overflow:hidden;border:1px solid #E2E8F0;';
   panel.innerHTML = `
     <div style="background:#17365D;color:#fff;padding:0.75rem 1rem;display:flex;justify-content:space-between;align-items:center"><b>Grok – Assistant MIMOUNI</b><button id="ai-close" style="background:none;border:none;color:#fff;font-size:1.4rem;cursor:pointer">×</button></div>
     <div id="ai-msgs" style="flex:1;overflow-y:auto;padding:0.8rem;font-size:0.9rem"></div>
@@ -1590,7 +1590,7 @@ function addMsg(text, me) {
   const box = document.getElementById('ai-msgs');
   if (!box) return;
   const div = document.createElement('div');
-  div.style.cssText = `margin:0.35rem 0;padding:0.55rem 0.75rem;border-radius:12px;max-width:88%;white-space:pre-wrap;${me ? 'background:#2563EB;color:#fff;margin-left:auto' : 'background:#F1F5F9;color:#1E293B'}`;
+  div.style.cssText = `margin:0.3rem 0;padding:0.5rem 0.7rem;border-radius:14px;max-width:85%;white-space:pre-wrap;font-size:0.88rem;line-height:1.4;${me ? 'background:#17365D;color:#fff;margin-left:auto' : 'background:#F8FAFC;color:#1E293B;border:1px solid #E2E8F0'}`;
   div.textContent = text;
   box.appendChild(div);
   box.scrollTop = box.scrollHeight;
