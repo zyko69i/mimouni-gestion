@@ -49,6 +49,7 @@ const ICON = {
   pie: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5a8.5 8.5 0 1 0 8.5 8.5H12z"/><path d="M14.5 3.9A8.5 8.5 0 0 1 20.1 9.5h-5.6z"/></svg>',
   chart: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V4M4 20h16"/><rect x="7.5" y="12" width="3.2" height="5.5" rx="1"/><rect x="13" y="8.5" width="3.2" height="9" rx="1"/><rect x="18.5" y="5.5" width="3.2" height="12" rx="1"/></svg>',
   truck: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6.5h11v9.5h-11z"/><path d="M13.5 9.5h4.2l3.3 3.4v3.1h-7.5z"/><circle cx="6.4" cy="18.2" r="1.8"/><circle cx="17.4" cy="18.2" r="1.8"/></svg>',
+  send: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 3 10.5 13.5"/><path d="M21 3l-6.8 18-3.7-7.5L3 9.8z"/></svg>',
   globe: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.6"/><path d="M3.6 9.5h16.8M3.6 14.5h16.8"/><path d="M12 3.4c2.4 2.4 3.6 5.3 3.6 8.6s-1.2 6.2-3.6 8.6c-2.4-2.4-3.6-5.3-3.6-8.6S9.6 5.8 12 3.4z"/></svg>',
   shield: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5.5c0 4.6-3 8-7 9.5-4-1.5-7-4.9-7-9.5V6z"/><path d="M9 12l2 2 4-4"/></svg>',
 };
@@ -566,6 +567,11 @@ function navGroups() {
       ...(r !== 'technicien' ? [['#/vehicules', 'truck', 'Parc véhicules']] : []),
       ['#/scanner', 'scan', 'Scanner'],
     ] },
+    { label: 'Documentation', items: [
+      ['#/documents', 'doc', 'Bibliothèque'],
+      ['#/courriers', 'send', 'Courriers'],
+      ['#/maintenance', 'gear', 'Maintenance'],
+    ] },
     { label: 'Équipe', items: [
       ['#/techniciens', 'users', r === 'technicien' ? 'Ma fiche' : 'Techniciens'],
       ['#/absences', 'abs', 'Présences & absences'],
@@ -692,15 +698,17 @@ function openOmni() {
   const add = (group, icon, label, sub, href) => items.push({ group, icon, label, sub: sub || '', href });
   navItems().forEach(([href, ic, lab]) => add('Aller à', ic, lab, '', href));
   D().chantiers.forEach((c) => add('Chantiers', 'site', c.name, c.client || c.address || '', '#/chantier/' + c.id));
-  D().technicians.slice(0, 40).forEach((t) => add('Techniciens', 'users', t.firstName + ' ' + t.lastName, t.position || '', '#/technicien/' + t.id));
+  D().technicians.forEach((t) => add('Techniciens', 'users', t.firstName + ' ' + t.lastName, t.position || '', '#/technicien/' + t.id));
   D().equipment.slice(0, 40).forEach((e) => add('Matériel', 'box', e.name, e.id, '#/equipement/' + e.id));
   D().tasks.slice(0, 60).forEach((t) => add('Tâches', 'list', t.title, chantierById(t.chantierId)?.name || '', '#/chantier/' + t.chantierId));
   (D().vehicles || []).forEach((vh) => add('Véhicules', 'truck', vh.plate + ' · ' + vehName(vh), siteName(vh.siteId), '#/vehicules'));
+  (D().documents || []).forEach((dc) => add('Documentation', 'doc', dc.title, [dc.ref, dc.category, dc.version && 'v' + dc.version].filter(Boolean).join(' · '), '#/documents'));
+  (D().docflows || []).forEach((fl) => add('Courriers', 'send', fl.name, [fl.type, fl.to || fl.from].filter(Boolean).join(' · '), '#/courriers'));
 
   const bg = document.createElement('div');
   bg.className = 'cmdk-bg';
   bg.innerHTML = `<div class="cmdk" role="dialog" aria-label="Recherche globale">
-    <div class="cmdk-input">${ICON.search}<input id="cmdk-q" placeholder="Rechercher un chantier, un technicien, un équipement, une tâche…" autocomplete="off"><kbd>Échap</kbd></div>
+    <div class="cmdk-input">${ICON.search}<input id="cmdk-q" placeholder="Rechercher un chantier, un technicien, un équipement, un document…" autocomplete="off"><kbd>Échap</kbd></div>
     <div class="cmdk-list" id="cmdk-list"></div>
     <div class="cmdk-foot"><span><kbd>↑</kbd> <kbd>↓</kbd> naviguer</span><span><kbd>↵</kbd> ouvrir</span><span style="margin-left:auto">${D().chantiers.length} chantiers · ${D().technicians.length} techniciens · ${D().equipment.length} équipements</span></div>
   </div>`;
@@ -749,7 +757,7 @@ async function render() {
   const map = { chantier: 'chantiers', technicien: 'techniciens', equipement: 'materiel', plus: 'plus' };
   const activeKey = map[key] || key;
   $$('[data-nav]').forEach((a) => { const n = a.dataset.nav.split('/')[1] || 'home'; a.classList.toggle('active', n === activeKey); });
-  const PAGE_LABEL = { home: isTech() ? 'Mon activité' : 'Tableau de bord', chantiers: 'Chantiers', chantier: 'Chantier', planning: 'Planning', pointage: 'Pointage des heures', techniciens: 'Techniciens', technicien: 'Fiche technicien', absences: 'Présences & absences', materiel: 'Matériel', equipement: 'Équipement', scanner: 'Scanner', rapports: 'Rapports', alertes: 'Alertes', journal: "Journal d'activité", reglages: 'Réglages', profil: 'Mon profil', plus: 'Plus', envois: 'Envois refusés', vehicules: 'Parc véhicules', habilitations: 'Habilitations', temps: 'Temps & production', sites: 'Sites' };
+  const PAGE_LABEL = { home: isTech() ? 'Mon activité' : 'Tableau de bord', chantiers: 'Chantiers', chantier: 'Chantier', planning: 'Planning', pointage: 'Pointage des heures', techniciens: 'Techniciens', technicien: 'Fiche technicien', absences: 'Présences & absences', materiel: 'Matériel', equipement: 'Équipement', scanner: 'Scanner', rapports: 'Rapports', alertes: 'Alertes', journal: "Journal d'activité", reglages: 'Réglages', profil: 'Mon profil', plus: 'Plus', envois: 'Envois refusés', vehicules: 'Parc véhicules', habilitations: 'Habilitations', temps: 'Temps & production', sites: 'Sites', documents: 'Bibliothèque documentaire', courriers: 'Courriers', maintenance: 'Maintenance' };
   const label = PAGE_LABEL[key] || 'Gestion';
   const elPage = $('#tb-page'); if (elPage) elPage.textContent = label;
   const elCrumb = $('#tb-crumb-page'); if (elCrumb) elCrumb.textContent = label;
@@ -835,6 +843,10 @@ ROUTES.home = async (v) => {
   const blocked = tasks.filter((t) => t.status === 'Bloquée');
   const pendingTasks = tasks.filter(taskLate);
   const habs = habAlerts();
+  const docsAlert = docAlerts();
+  const maintLate = maintAlerts();
+  const repsOpen = openReports();
+  const eqCtrl = d.equipment.filter((e) => e.nextControl && daysUntil(e.nextControl) <= 30);
   const pr = presentToday();
   const planned = d.chantiers.reduce((s, c) => s + progressOf(c.id).total, 0);
   const real = d.chantiers.reduce((s, c) => s + progressOf(c.id).real, 0);
@@ -846,7 +858,7 @@ ROUTES.home = async (v) => {
   const rawName = String(S.me.name || '');
   const civ = (rawName.match(/^(M\.|Mme|Monsieur|Madame)\s+/i) || [''])[0];
   const firstName = civ + (rawName.replace(/^(M\.|Mme|Monsieur|Madame)\s+/i, '').split(/\s+/)[0] || '');
-  const attention = pendingTasks.length + habs.length + blocked.length + late.length;
+  const attention = pendingTasks.length + habs.length + blocked.length + late.length + docsAlert.length + maintLate.length + repsOpen.length;
   const heroStats = `
     <div class="hero-stats">
       <div><b>${active.length}</b><span>Chantiers actifs</span></div>
@@ -889,6 +901,12 @@ ROUTES.home = async (v) => {
     ${kpi(`${pr.present}<small>/${pr.total}</small>`, "Présents aujourd'hui", '', '#/planning', { icon: 'users', sub: `${pr.absents} absence${pr.absents > 1 ? 's' : ''} déclarée${pr.absents > 1 ? 's' : ''}` })}
     ${kpi(pendingTasks.length, 'Tâches en retard', pendingTasks.length ? 'red' : 'ok', '#/chantiers', { icon: 'clock', sub: `${tasks.length} tâches ouvertes` })}
     ${kpi(habs.length, 'Habilitations à renouveler', habs.length ? 'warn' : 'ok', '#/techniciens', { icon: 'shield', sub: 'Sous 60 jours' })}
+  </div>
+  <div class="grid g4 section">
+    ${kpi(docsAlert.length, 'Documents à réviser', docsAlert.length ? 'warn' : 'ok', '#/documents', { icon: 'doc', sub: `${(d.documents || []).length} références suivies` })}
+    ${kpi(maintLate.length, 'Maintenances à traiter', maintLate.length ? 'red' : 'ok', '#/maintenance', { icon: 'gear', sub: 'Échéance sous 7 jours' })}
+    ${kpi(repsOpen.length, 'Signalements ouverts', repsOpen.length ? 'red' : 'ok', '#/maintenance', { icon: 'alert', sub: `${(d.reports || []).length} signalements tracés` })}
+    ${kpi(eqCtrl.length, 'Contrôles équipements', eqCtrl.length ? 'warn' : 'ok', '#/materiel', { icon: 'box', sub: 'Sous 30 jours' })}
   </div>
   <div class="grid g23 section">
     <div class="card">
@@ -1173,7 +1191,7 @@ async function bindPhotos(root) {
 }
 
 // ---------------- Planning ----------------
-const PL = { mode: 'week', anchor: todayISO(), site: 'all', tempsYear: 0, habHorizon: 60, habKind: '', vehQ: '', vehStatus: '', eqCat: '', techMetier: '' };
+const PL = { mode: 'week', anchor: todayISO(), site: 'all', tempsYear: 0, habHorizon: 60, habKind: '', vehQ: '', vehStatus: '', eqCat: '', techMetier: '', docQ: '', docCat: '', docStatut: '', flowDir: 'Envoi', maintTab: 'plan' };
 function weekStart(s) { const d = parseD(s); const w = (d.getDay() + 6) % 7; d.setDate(d.getDate() - w); return iso(d); }
 ROUTES.planning = async (v) => {
   const d = D();
@@ -1365,6 +1383,39 @@ ROUTES.technicien = async (v, id) => {
   ], onSubmit: async (vals) => { await api('POST', `technicians/${t.id}/habilitations`, vals); toast('Habilitation enregistrée'); refresh(); } });
 };
 
+
+// Remplaçants possibles pour une absence : même site, même métier, disponible et habilité.
+// Ce sont des suggestions indicatives : la décision reste au chef d'équipe.
+function replacementSuggestions(abs) {
+  const target = techById(abs.techId); if (!target) return [];
+  const need = currentHabs(target).filter((hb) => habStatus(hb).level === 0).map((hb) => String(hb.symbol || hb.kind).toUpperCase());
+  const overlap = (a, b) => a.start <= (b.end || b.start) && (a.end || a.start) >= b.start;
+  return DF().technicians.filter((t) => t.id !== target.id && t.active !== false && t.siteId === target.siteId)
+    .map((t) => {
+      const abs2 = DF().absences.some((a) => a.techId === t.id && a.status !== 'Refusée' && overlap(a, abs));
+      const busy = DF().assignments.some((a) => a.techId === t.id && a.date >= abs.start && a.date <= (abs.end || abs.start));
+      const have = currentHabs(t).filter((hb) => habStatus(hb).level === 0).map((hb) => String(hb.symbol || hb.kind).toUpperCase());
+      const missing = need.filter((x) => !have.includes(x));
+      let score = 0;
+      if (t.metier && target.metier && t.metier === target.metier) score += 3;
+      if (!abs2) score += 2;
+      if (!busy) score += 2;
+      if (!missing.length) score += 3; else score -= missing.length;
+      if (t.managerId === target.managerId) score += 1;
+      return { t, score, abs2, busy, missing };
+    })
+    .filter((x) => !x.abs2)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 3);
+}
+function replacementCard(list) {
+  if (!list.length) return '';
+  return `<div class="card section"><h2>${ICON.users} Remplaçants suggérés</h2>
+    <p class="muted small" style="margin:-.3rem 0 .9rem">Pour chaque absence en cours ou à venir, les profils les plus proches parmi les techniciens du même site : même métier, disponibles et couvrant les habilitations nécessaires. Suggestion indicative, à valider par le chef d'équipe.</p>
+    ${list.slice(0, 6).map((a) => { const t = techById(a.techId); const sug = replacementSuggestions(a);
+      return `<div style="margin-bottom:1rem"><div class="row" style="justify-content:space-between"><b>${esc(t ? t.firstName + ' ' + t.lastName : 'Technicien')}</b><span class="muted small">${fmtD(a.start)}${a.end && a.end !== a.start ? ' → ' + fmtD(a.end) : ''}</span></div>
+      ${sug.length ? `<div class="list">${sug.map((x) => `<div class="item"><span style="flex:1;min-width:0"><b>${esc(x.t.firstName + ' ' + x.t.lastName)}</b><br><span class="muted small">${esc(x.t.metier || '')}${x.busy ? ' · déjà affecté sur la période' : ' · disponible'}${x.missing.length ? ' · manque ' + esc(x.missing.join(', ')) : ' · habilitations couvertes'}</span></span><span class="pill ${x.missing.length ? 'orange' : 'green'}">${x.score >= 8 ? 'Idéal' : x.score >= 5 ? 'Convient' : 'À vérifier'}</span></div>`).join('')}</div>` : '<p class="muted small">Aucun technicien du même site disponible sur cette période.</p>'}</div>`; }).join('')}</div>`;
+}
 // ---------------- Présences et absences ----------------
 ROUTES.absences = async (v) => {
   const list = D().absences.slice().sort((a, b) => b.start.localeCompare(a.start));
@@ -1374,7 +1425,7 @@ ROUTES.absences = async (v) => {
   <div class="grid g4" style="margin-bottom:1rem">${kpi(todayAbs.length, 'Absents / retards aujourd\'hui', todayAbs.length ? 'red' : 'ok')}${kpi(list.filter((a) => a.status === 'Signalée' || a.status === 'Demandée').length, 'À valider')}</div>
   <div class="card"><div class="table-wrap"><table><thead><tr><th>Technicien</th><th>Type</th><th>Dates</th><th>Motif</th><th>Statut</th><th>Signalé par</th><th></th></tr></thead><tbody>
   ${list.map((a) => `<tr><td>${esc(techName(a.techId))}${demoTag(a)}</td><td><span class="pill ${a.type === 'maladie' ? 'red' : ''}">${esc(absLabel(a))}</span></td><td>${fmtD(a.start)}${a.end && a.end !== a.start ? ' → ' + fmtD(a.end) : ''}${a.time ? ' · ' + esc(a.time) : ''}</td><td class="small">${esc(a.motif || '')}</td><td><span class="pill ${a.status === 'Validée' ? 'green' : a.status === 'Refusée' ? 'red' : 'orange'}">${esc(a.status)}</span></td><td class="small">${esc(userName(a.author))}</td><td>${isAdmin() && a.status !== 'Validée' ? `<button class="btn sm" data-val="${a.id}">Valider</button> <button class="btn sm" data-ref="${a.id}">Refuser</button>` : ''}${isAdmin() ? ` <button class="btn sm" data-edit-abs="${a.id}">Corriger</button>` : ''}</td></tr>`).join('') || '<tr><td colspan="7" class="muted">Aucune absence.</td></tr>'}
-  </tbody></table></div>${isChef() ? '<p class="muted small">Pour respecter la vie privée, un arrêt maladie apparaît comme « Absent » : seul l\'administrateur voit le motif.</p>' : ''}</div>`;
+  </tbody></table></div>${replacementCard(todayAbs.filter((a) => a.status !== 'Refusée'))}${isChef() ? '<p class="muted small">Pour respecter la vie privée, un arrêt maladie apparaît comme « Absent » : seul l\'administrateur voit le motif.</p>' : ''}</div>`;
   $('#new-abs', v).onclick = () => {
     const techs = isTech() ? [[S.me.technicianId, 'Moi']] : D().technicians.filter((t) => t.active !== false).map((t) => [t.id, t.firstName + ' ' + t.lastName]);
     formModal({ title: isTech() ? 'Demande de congé' : 'Signaler une absence', fields: [
@@ -1446,9 +1497,20 @@ function equipForm(e = null) {
     { name: 'location', label: 'Emplacement précis', value: e?.location },
     { name: 'status', label: 'État', type: 'select', options: ['En service', 'À contrôler', 'Hors service', 'Déposé'], value: e?.status || 'En service' },
     { name: 'criticality', label: 'Criticité', type: 'select', options: ['Standard', 'Critique'], value: e?.criticality || 'Standard' },
-    { name: 'brand', label: 'Marque', value: e?.brand }, { name: 'model', label: 'Modèle', value: e?.model }, { name: 'serial', label: 'N° de série', value: e?.serial },
+    { name: 'building', label: 'Bâtiment', value: e?.building }, { name: 'local', label: 'Local', value: e?.local },
+    { name: 'brand', label: 'Marque', value: e?.brand }, { name: 'manufacturer', label: 'Fabricant', value: e?.manufacturer },
+    { name: 'model', label: 'Modèle', value: e?.model }, { name: 'reference', label: 'Référence constructeur', value: e?.reference },
+    { name: 'serial', label: 'N° de série', value: e?.serial }, { name: 'supplier', label: 'Fournisseur', value: e?.supplier },
+    { name: 'purchaseDate', label: 'Date d\'achat', type: 'date', value: e?.purchaseDate },
+    { name: 'warrantyUntil', label: 'Garantie jusqu\'au', type: 'date', value: e?.warrantyUntil },
     { name: 'commissioned', label: 'Mise en service', type: 'date', value: e?.commissioned },
     { name: 'nextControl', label: 'Prochain contrôle', type: 'date', value: e?.nextControl },
+    { name: 'function', label: 'Fonction assurée', value: e?.function },
+    { name: 'power', label: 'Puissance', value: e?.power }, { name: 'voltage', label: 'Tension', value: e?.voltage }, { name: 'current', label: 'Intensité', value: e?.current },
+    { name: 'dimensions', label: 'Dimensions', value: e?.dimensions }, { name: 'ip', label: 'Indice de protection (IP)', value: e?.ip }, { name: 'elecClass', label: 'Classe électrique', value: e?.elecClass },
+    { name: 'conditions', label: 'Conditions d\'utilisation', type: 'textarea', value: e?.conditions },
+    { name: 'manager', label: 'Responsable', type: 'select', options: [['', '–'], ...DF().technicians.map((t) => [t.id, t.firstName + ' ' + t.lastName])], value: e?.manager },
+    { name: 'userId', label: 'Utilisateur référent', type: 'select', options: [['', '–'], ...DF().technicians.map((t) => [t.id, t.firstName + ' ' + t.lastName])], value: e?.userId },
     { name: 'specs', label: 'Caractéristiques techniques', type: 'textarea', value: e?.specs },
   ], submitLabel: e ? 'Enregistrer' : 'Créer la fiche et le QR code', onSubmit: async (vals) => {
     const r = e ? await api('PUT', 'equipment/' + e.id, vals) : await api('POST', 'equipment', vals);
@@ -1487,11 +1549,55 @@ ROUTES.equipement = async (v, id) => {
   v.innerHTML = `<div class="head"><div><a href="#/materiel" class="small">← Matériel</a><h1>${esc(e.name)}${demoTag(e)}</h1><span class="muted">${esc(e.id)}</span></div>${isAdmin() ? '<div class="row"><button class="btn sm" id="edit-eq">Modifier</button><button class="btn sm dark" id="print-eq">Imprimer l\'étiquette</button><button class="btn sm" style="background:#DC2626;color:#fff" id="del-eq">Supprimer</button></div>' : ''}</div>
   <button class="btn primary bigbtn" id="add-int" style="margin-bottom:1rem">+ Ajouter une intervention, une remarque ou des photos</button>
   <div class="grid g2">
-    <div class="card"><h2>Fiche</h2><table>
-      <tr><th>Type</th><td>${esc(e.type || '–')}</td></tr><tr><th>Marque / modèle</th><td>${esc([e.brand, e.model].filter(Boolean).join(' – ') || '–')}</td></tr>
-      <tr><th>N° de série</th><td>${esc(e.serial || '–')}</td></tr><tr><th>Chantier / site</th><td>${chantierById(e.chantierId) ? `<a href="#/chantier/${e.chantierId}">${esc(chantierById(e.chantierId).name)}</a>` : '–'}</td></tr>
-      <tr><th>Emplacement</th><td>${esc(e.location || '–')}</td></tr><tr><th>Mise en service</th><td>${fmtD(e.commissioned)}</td></tr><tr><th>Caractéristiques</th><td>${esc(e.specs || '–')}</td></tr></table></div>
-    ${isAdmin() ? `<div class="card"><h2>QR code permanent et étiquette (50 × 30 mm)</h2><p class="small muted">Lien permanent : ${esc(equipURL(e.id))}<br>Étiquettes imprimées : ${e.labelPrints || 0}. Une réimpression garde toujours le même QR code.</p><div class="label-preview" id="label-prev">${labelHTML(e)}</div></div>` : ''}
+    <div class="card"><h2>Identification</h2><table>
+      <tr><th>Code</th><td><b>${esc(e.id)}</b></td></tr>
+      <tr><th>Désignation</th><td>${esc(e.name || '–')}</td></tr>
+      <tr><th>Type / catégorie</th><td>${esc(e.type || '–')}${e.category && e.category !== e.type ? ' · ' + esc(e.category) : ''}</td></tr>
+      <tr><th>Fabricant / marque</th><td>${esc([e.manufacturer || e.brand, e.model].filter(Boolean).join(' – ') || '–')}</td></tr>
+      <tr><th>Référence</th><td>${esc(e.reference || '–')}</td></tr>
+      <tr><th>N° de série</th><td>${esc(e.serial || '–')}</td></tr>
+      <tr><th>Fournisseur</th><td>${esc(e.supplier || '–')}</td></tr>
+      <tr><th>Achat / garantie</th><td>${fmtD(e.purchaseDate)}${e.warrantyUntil ? ' · garantie ' + fmtD(e.warrantyUntil) : ''}</td></tr>
+      <tr><th>Mise en service</th><td>${fmtD(e.commissioned)}</td></tr>
+      <tr><th>État / criticité</th><td>${esc(e.status || 'En service')} · ${esc(e.criticality || 'Standard')}</td></tr>
+      <tr><th>Prochain contrôle</th><td>${e.nextControl ? fmtD(e.nextControl) + ' (' + (daysUntil(e.nextControl) < 0 ? 'dépassé' : 'J-' + daysUntil(e.nextControl)) + ')' : '–'}</td></tr>
+    </table></div>
+    <div class="card"><h2>Caractéristiques et localisation</h2><table>
+      <tr><th>Fonction</th><td>${esc(e.function || '–')}</td></tr>
+      <tr><th>Puissance</th><td>${esc(e.power || '–')}</td></tr>
+      <tr><th>Tension</th><td>${esc(e.voltage || '–')}</td></tr>
+      <tr><th>Intensité</th><td>${esc(e.current || '–')}</td></tr>
+      <tr><th>Dimensions</th><td>${esc(e.dimensions || '–')}</td></tr>
+      <tr><th>Protection</th><td>${esc([e.ip, e.elecClass].filter(Boolean).join(' · ') || '–')}</td></tr>
+      <tr><th>Conditions</th><td>${esc(e.conditions || '–')}</td></tr>
+      <tr><th>Site</th><td>${sitePill(e.siteId || siteOfChantier(e.chantierId)) || '–'}</td></tr>
+      <tr><th>Chantier</th><td>${chantierById(e.chantierId) ? `<a href="#/chantier/${e.chantierId}">${esc(chantierById(e.chantierId).name)}</a>` : '–'}</td></tr>
+      <tr><th>Bâtiment / local</th><td>${esc([e.building, e.local].filter(Boolean).join(' · ') || '–')}</td></tr>
+      <tr><th>Emplacement</th><td>${esc([e.zone, e.location].filter(Boolean).join(' · ') || '–')}</td></tr>
+      <tr><th>Responsable</th><td>${e.manager && techById(e.manager) ? esc(techById(e.manager).firstName + ' ' + techById(e.manager).lastName) : '–'}</td></tr>
+      <tr><th>Utilisateur</th><td>${e.userId && techById(e.userId) ? esc(techById(e.userId).firstName + ' ' + techById(e.userId).lastName) : '–'}</td></tr>
+      <tr><th>Caractéristiques</th><td>${esc(e.specs || '–')}</td></tr>
+    </table></div>
+  </div>
+  <div class="grid g2">
+    ${isAdmin() ? `<div class="card"><h2>QR code permanent et étiquette (50 × 30 mm)</h2>
+      <p class="small muted">Lien permanent : ${esc(equipURL(e.id))}<br>Version du QR : v${Number(e.qrVersion || 1)} · étiquettes imprimées : ${e.labelPrints || 0}. Une réimpression garde toujours le même QR code.</p>
+      ${e.qrDisabled ? `<div class="notice" style="border-color:#DC2626">${ICON.alert}<span><b>QR code désactivé</b> le ${fmtDT(e.qrDisabledAt)} – ${esc(e.qrDisabledReason || '')}. Le scan affiche que l'étiquette n'est plus valable.</span></div>` : ''}
+      <div class="label-preview" id="label-prev">${labelHTML(e)}</div>
+      <div class="row" style="margin-top:.7rem;flex-wrap:wrap">
+        <button class="btn sm" id="qr-regen">Régénérer le QR</button>
+        <button class="btn sm" id="qr-toggle" style="background:${e.qrDisabled ? '#0E9F6E' : '#DC2626'};color:#fff">${e.qrDisabled ? 'Réactiver' : 'Désactiver'}</button>
+      </div>
+      <p class="small muted" style="margin:.6rem 0 0">Création, régénération, désactivation et réactivation réservées au webmaster (administrateur). Chaque action est tracée et versionnée.</p>
+      ${(e.qrHistory || []).length ? `<div class="list" style="margin-top:.6rem">${e.qrHistory.slice(-4).reverse().map((x) => `<div class="item"><span style="flex:1">${esc({ regenerate: 'Régénération', deactivate: 'Désactivation', reactivate: 'Réactivation' }[x.action] || x.action)} · v${x.version}</span><span class="muted small">${fmtDT(x.at)}</span></div>`).join('')}</div>` : ''}
+    </div>` : `<div class="card"><h2>QR code de l'équipement</h2><p class="small muted">L'étiquette QR est gérée par le webmaster. Scannez-la pour ouvrir cette fiche et saisir une intervention.</p><div class="label-preview">${labelHTML(e)}</div></div>`}
+    <div class="card"><h2>Suivi : maintenance et signalements</h2>
+      ${(() => { const mts = (DF().maintenances || []).filter((m) => m.equipId === e.id); const reps = (DF().reports || []).filter((r) => r.equipId === e.id);
+        return `<div class="mini-row"><div><b>${mts.filter((m) => m.status !== 'Réalisée').length}</b><span>maintenances à venir</span></div><div><b>${reps.filter((r) => r.status !== 'Clos').length}</b><span>signalements ouverts</span></div><div><b>${mts.length + reps.length}</b><span>événements</span></div></div>
+        ${mts.length ? `<div class="list" style="margin-top:.6rem">${mts.slice(0, 4).map((m) => `<a class="item" href="#/maintenance" style="text-decoration:none;color:inherit"><span style="flex:1;min-width:0"><b>${esc(m.title)}</b><br><span class="muted small">${esc(m.kind)} · ${fmtD(m.dueDate)}</span></span>${maintStatusPill(m.status)}</a>`).join('')}</div>` : ''}
+        ${reps.length ? `<div class="list" style="margin-top:.6rem">${reps.slice(0, 4).map((r) => `<span class="item"><span style="flex:1;min-width:0"><b>${esc(r.type)}</b><br><span class="muted small">${esc(r.description).slice(0, 80)}</span></span>${repStatusPill(r.status)}</span>`).join('')}</div>` : ''}
+        <div class="row" style="margin-top:.7rem"><button class="btn sm" id="eq-report">Signaler un problème</button><a class="btn sm" href="#/maintenance">Voir la maintenance</a></div>`; })()}
+    </div>
   </div>
   <div class="card"><h2>Historique des interventions</h2><p class="muted small">Historique en ajout seul : rien ne peut être supprimé. Une correction s'ajoute à la suite et l'original reste visible.${fromCache ? ' <b>Copie locale (hors ligne).</b>' : ''}</p>
     <div class="timeline">${pending.map((q) => `<div class="ev pending"><b>En attente d'envoi</b> <span class="muted small">· saisi le ${fmtDT(q.at)}</span><div>${esc(q.body.content)}</div>${q.photos ? `<span class="small">${q.photos} photo(s)</span>` : ''}</div>`).join('')}${ordered.map(entryHTML).join('') || (pending.length ? '' : '<p class="muted">Aucune intervention.</p>')}</div></div>`;
@@ -1514,8 +1620,201 @@ ROUTES.equipement = async (v, id) => {
   $$('[data-correct]', v).forEach((b) => (b.onclick = () => { const o = hist.find((x) => x.id === b.dataset.correct); formModal({ title: 'Corriger une entrée', intro: `<div class="notice small">Original (${fmtDT(o.at)}) : ${esc(o.content)}</div><p class="muted small">L'original n'est pas effacé : la correction est ajoutée et liée à l'entrée d'origine.</p>`, fields: [
     { name: 'content', label: 'Information corrigée', type: 'textarea', required: true }, { name: 'reason', label: 'Motif de la correction', required: true },
   ], onSubmit: async (vals) => { const r = await api('POST', `equipment/${e.id}/history`, { ...vals, type: 'correction', correctsId: o.id, clientId: uid() }, { queueable: true, kind: 'correction', label: 'Correction sur ' + e.name }); toast(r.queued ? 'Hors ligne : correction en attente.' : 'Correction ajoutée'); render(); } }); }));
+  on('#qr-regen', async () => { if (!(await confirmBox('Régénérer le QR code ? La version augmente et les anciennes étiquettes imprimées ne sont plus valables (le lien de la fiche reste identique).', 'Régénérer'))) return; try { await api('POST', `equipment/${e.id}/qr`, { action: 'regenerate', reason: 'régénération demandée' }); toast('QR code régénéré'); refresh(); } catch (ex) { toast(ex.message); } });
+  on('#qr-toggle', async () => { const act = e.qrDisabled ? 'reactivate' : 'deactivate'; const why = act === 'deactivate' ? await confirmBox('Désactiver ce QR code ? Le scan signalera une étiquette non valable.', 'Désactiver') : true; if (!why) return; try { await api('POST', `equipment/${e.id}/qr`, { action: act, reason: act === 'deactivate' ? 'étiquette retirée ou remplacée' : 'remise en service' }); toast(act === 'deactivate' ? 'QR code désactivé' : 'QR code réactivé'); refresh(); } catch (ex) { toast(ex.message); } });
+  on('#eq-report', () => reportForm(e));
   $$('[data-mask]', v).forEach((b) => (b.onclick = () => formModal({ title: 'Masquer une entrée', intro: '<p class="muted small">L\'entrée n\'est jamais effacée : elle est masquée pour les chefs et techniciens, avec un motif tracé.</p>', fields: [{ name: 'reason', label: 'Motif', required: true }], onSubmit: async (vals) => { await api('POST', `equipment/${e.id}/history`, { type: 'masquage', correctsId: b.dataset.mask, reason: vals.reason }); toast('Entrée masquée (tracé)'); render(); } })));
 };
+
+
+// ---------------- Documentation, courriers, maintenance, signalements ----------------
+const docStatusPill = (s) => `<span class="pill ${s === 'Valide' ? 'green' : s === 'À réviser' ? 'orange' : s === 'Remplacé' ? 'red' : ''}">${esc(s || '–')}</span>`;
+const flowStatusPill = (s) => `<span class="pill ${s === 'Validé' || s === 'Reçu' ? 'green' : s === 'Envoyé' ? 'dark' : s === 'Refusé' ? 'red' : s === 'Attendu' ? 'orange' : ''}">${esc(s || '–')}</span>`;
+const maintStatusPill = (s) => `<span class="pill ${s === 'Réalisée' ? 'green' : s === 'En cours' ? 'dark' : s === 'Annulée' ? '' : 'orange'}">${esc(s || '–')}</span>`;
+const repStatusPill = (s) => `<span class="pill ${s === 'Clos' ? 'green' : s === 'En cours' ? 'dark' : s === 'Refusé' ? '' : 'red'}">${esc(s || '–')}</span>`;
+const urgencyPill = (u) => `<span class="pill ${u === 'Haute' ? 'red' : u === 'Normale' ? 'orange' : ''}">${esc(u || 'Normale')}</span>`;
+
+function docAlerts() {
+  return (D().documents || []).filter((x) => x.status === 'À réviser' || x.status === 'Remplacé' || (x.reviewAt && daysUntil(x.reviewAt) <= 30))
+    .sort((a, b) => String(a.reviewAt || '').localeCompare(String(b.reviewAt || '')));
+}
+function maintAlerts() {
+  return (D().maintenances || []).filter((m) => m.status !== 'Réalisée' && m.status !== 'Annulée' && m.dueDate && daysUntil(m.dueDate) <= 7)
+    .sort((a, b) => String(a.dueDate).localeCompare(String(b.dueDate)));
+}
+function openReports() { return (D().reports || []).filter((r) => r.status === 'Ouvert' || r.status === 'En cours'); }
+
+ROUTES.documents = async (v) => {
+  const all = D().documents || [];
+  const cats = [...new Set(all.map((x) => x.category).filter(Boolean))].sort();
+  const q = (PL.docQ || '').toLowerCase(); const fc = PL.docCat || ''; const fs = PL.docStatut || '';
+  const list = all.filter((x) => (!q || (x.title + ' ' + x.ref + ' ' + (x.owner || '')).toLowerCase().includes(q)) && (!fc || x.category === fc) && (!fs || x.status === fs))
+    .sort((a, b) => String(a.title).localeCompare(String(b.title)));
+  const alerts = docAlerts();
+  const canEdit = !isTech();
+  v.innerHTML = `<div class="head"><div><h1>Bibliothèque documentaire <span class="muted small">(${all.length})</span></h1><p class="muted small" style="margin:.3rem 0 0">Documents techniques, sécurité et nucléaire : version, responsable, site, statut et date de révision.</p></div>${canEdit ? '<button class="btn primary" id="new-doc">+ Nouveau document</button>' : ''}</div>
+  <div class="grid g4 section">
+    ${kpi(all.length, 'Documents référencés', '', '', { icon: 'doc', sub: `${cats.length} catégories` })}
+    ${kpi(all.filter((x) => x.status === 'Valide').length, 'À jour', 'ok', '', { icon: 'check', sub: 'Version en vigueur' })}
+    ${kpi(alerts.length, 'À réviser ou remplacer', alerts.length ? 'warn' : 'ok', '', { icon: 'alert', sub: 'Revue sous 30 jours incluse' })}
+    ${kpi(new Set(all.map((x) => x.siteId).filter(Boolean)).size, 'Sites couverts', '', '#/sites', { icon: 'globe', sub: 'Documents rattachés' })}
+  </div>
+  <div class="grid g23 section">
+    <div class="card"><h2>${ICON.doc} Répartition par catégorie</h2><p class="muted small" style="margin:-.3rem 0 .9rem">Volume de références par domaine.</p>
+      ${donut(cats.map((c, i) => ({ l: c, v: all.filter((x) => x.category === c).length, c: PALETTE[i % PALETTE.length] })), { center: all.length, sub: 'documents' })}</div>
+    <div class="card"><h2>${ICON.bell} Revues à planifier ${alerts.length ? `<span class="pill orange" style="margin-left:auto">${alerts.length}</span>` : ''}</h2>
+      <p class="muted small" style="margin:-.3rem 0 .9rem">Documents à réviser, remplacés ou dont la revue arrive à échéance.</p>
+      ${alerts.length ? `<div class="list">${alerts.slice(0, 7).map((x) => `<div class="item"><span style="flex:1;min-width:0"><b>${esc(x.title)}</b><br><span class="muted small">${esc(x.ref || '')} · v${esc(x.version || '–')}${x.reviewAt ? ' · revue ' + fmtD(x.reviewAt) : ''}</span></span>${docStatusPill(x.status)}</div>`).join('')}</div>` : `<div class="empty">${ICON.check}Aucune révision en attente.</div>`}</div>
+  </div>
+  <div class="card section">
+    <div class="toolbar"><input class="inp" id="docq" placeholder="Rechercher un document, une référence, un responsable…" value="${esc(PL.docQ || '')}">
+      <select class="inp" id="doccat" aria-label="Filtrer par catégorie"><option value="">Toutes les catégories</option>${cats.map((c) => `<option value="${esc(c)}" ${fc === c ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select>
+      <select class="inp" id="docstatut" aria-label="Filtrer par statut"><option value="">Tous les statuts</option>${['Valide', 'À réviser', 'Remplacé', 'Archivé'].map((x) => `<option value="${esc(x)}" ${fs === x ? 'selected' : ''}>${esc(x)}</option>`).join('')}</select></div>
+    <div class="table-wrap"><table data-sort><thead><tr><th>Référence</th><th>Titre</th><th>Catégorie</th><th>Site</th><th>Version</th><th>Statut</th><th>Révision</th><th>Responsable</th><th data-nosort></th></tr></thead><tbody>
+    ${list.map((x) => `<tr><td><b>${esc(x.ref || '–')}</b></td><td>${esc(x.title)}${demoTag(x)}</td><td class="small">${esc(x.category || '–')}</td><td>${x.siteId ? sitePill(x.siteId) : '<span class="muted small">Tous sites</span>'}</td><td class="small">v${esc(x.version || '–')}</td><td>${docStatusPill(x.status)}</td><td class="small" data-v="${x.reviewAt ? daysUntil(x.reviewAt) : ''}">${esc(x.reviewAt ? fmtD(x.reviewAt) : '–')}</td><td class="small">${esc(x.owner || '–')}</td><td>${canEdit ? `<button class="btn sm" data-doc="${x.id}">Modifier</button>` : ''}</td></tr>`).join('') || `<tr><td colspan="9" class="muted">Aucun document${q || fc || fs ? ' ne correspond à ce filtre' : ''}.</td></tr>`}
+    </tbody></table></div>
+    <p class="muted small" style="margin:.7rem 0 0">${list.length} document${list.length > 1 ? 's' : ''} affiché${list.length > 1 ? 's' : ''}. Un document n'est jamais supprimé : il est archivé ou remplacé, avec sa version conservée.</p>
+  </div>`;
+  const bindQ = (id, key, setter) => { const el = $('#' + id, v); if (el) el.oninput = (ev) => { PL[key] = ev.target.value; clearTimeout(PL.docT); PL.docT = setTimeout(() => render().then(() => { const i = $('#' + id); if (i) { i.focus(); i.setSelectionRange(i.value.length, i.value.length); } }), 300); }; };
+  bindQ('docq', 'docQ');
+  const cs = $('#doccat', v); if (cs) cs.onchange = () => { PL.docCat = cs.value; render(); };
+  const st = $('#docstatut', v); if (st) st.onchange = () => { PL.docStatut = st.value; render(); };
+  $$('[data-doc]', v).forEach((b) => (b.onclick = () => { const doc = all.find((x) => x.id === b.dataset.doc); if (doc) docForm(doc); }));
+  const nb = $('#new-doc', v); if (nb) nb.onclick = () => docForm();
+  sortableTables(v);
+};
+
+function docForm(doc = null) {
+  formModal({ title: doc ? 'Modifier le document' : 'Nouveau document', fields: [
+    { name: 'title', label: 'Titre', required: true, value: doc?.title },
+    { name: 'category', label: 'Catégorie', type: 'datalist', options: ['Électricité', 'Sécurité', 'Nucléaire', 'Qualité', 'Administratif'], value: doc?.category || 'Électricité' },
+    { name: 'ref', label: 'Référence', value: doc?.ref },
+    { name: 'version', label: 'Version', value: doc?.version || '1.0' },
+    { name: 'status', label: 'Statut', type: 'select', options: ['Valide', 'À réviser', 'Remplacé', 'Archivé'], value: doc?.status || 'Valide' },
+    { name: 'siteId', label: 'Site concerné', type: 'select', options: [['', 'Tous les sites'], ...sitesList().map((st) => [st.id, st.name])], value: doc?.siteId || '' },
+    { name: 'owner', label: 'Responsable du document', value: doc?.owner },
+    { name: 'reviewAt', label: 'Prochaine revue', type: 'date', value: doc?.reviewAt },
+    { name: 'link', label: 'Lien vers le fichier (optionnel)', value: doc?.link },
+    { name: 'notes', label: 'Notes', type: 'textarea', value: doc?.notes },
+  ], submitLabel: doc ? 'Enregistrer' : 'Ajouter le document', onSubmit: async (vals) => {
+    if (doc) await api('PUT', 'documents/' + doc.id, vals); else await api('POST', 'documents', vals);
+    toast(doc ? 'Document mis à jour' : 'Document ajouté'); await refresh();
+  } });
+}
+
+ROUTES.courriers = async (v) => {
+  const all = D().docflows || [];
+  const dir = PL.flowDir || 'Envoi';
+  const list = all.filter((x) => x.direction === dir).sort((a, b) => String(b.sentAt || '').localeCompare(String(a.sentAt || '')));
+  const lateness = all.filter((x) => x.status === 'Attendu' && x.sentAt && daysUntil(x.sentAt) < -10);
+  const canEdit = !isTech();
+  v.innerHTML = `<div class="head"><div><h1>Courriers et documents administratifs <span class="muted small">(${all.length})</span></h1><p class="muted small" style="margin:.3rem 0 0">Suivi des envois et des réceptions : plan de prévention, comptes rendus, attachements, certificats, accusés de réception.</p></div>${canEdit ? '<button class="btn primary" id="new-flow">+ Enregistrer un courrier</button>' : ''}</div>
+  <div class="grid g4 section">
+    ${kpi(all.filter((x) => x.direction === 'Envoi').length, 'Envois', '', '', { icon: 'send', sub: 'Documents émis' })}
+    ${kpi(all.filter((x) => x.direction === 'Réception').length, 'Réceptions', '', '', { icon: 'doc', sub: 'Documents reçus' })}
+    ${kpi(all.filter((x) => x.status === 'Attendu').length, 'En attente', all.some((x) => x.status === 'Attendu') ? 'warn' : '', '', { icon: 'clock', sub: 'Sans retour à ce jour' })}
+    ${kpi(lateness.length, 'Sans retour depuis 10 j', lateness.length ? 'red' : 'ok', '', { icon: 'bell', sub: 'À relancer' })}
+  </div>
+  <div class="card section">
+    <div class="toolbar"><div class="row" style="gap:.4rem">
+      ${['Envoi', 'Réception'].map((x) => `<button class="btn sm ${dir === x ? 'primary' : ''}" data-dir="${x}">${x === 'Envoi' ? 'Envois' : 'Réceptions'}</button>`).join('')}
+    </div><span class="muted small" style="margin-left:auto">${list.length} élément${list.length > 1 ? 's' : ''}</span></div>
+    <div class="table-wrap"><table data-sort><thead><tr><th>Libellé</th><th>Type</th><th>${dir === 'Envoi' ? 'Destinataire' : 'Expéditeur'}</th><th>Site</th><th>Date</th><th>Statut</th><th>Accusé</th><th data-nosort></th></tr></thead><tbody>
+    ${list.map((x) => `<tr><td><b>${esc(x.name)}</b>${demoTag(x)}</td><td class="small">${esc(x.type || '–')}</td><td class="small">${esc(dir === 'Envoi' ? x.to : x.from) || '–'}</td><td>${x.siteId ? sitePill(x.siteId) : '–'}</td><td class="small" data-v="${x.sentAt || ''}">${esc(fmtD(x.sentAt))}</td><td>${flowStatusPill(x.status)}</td><td>${x.ack ? '<span class="pill green">Oui</span>' : '<span class="pill">Non</span>'}</td><td>${canEdit ? `<button class="btn sm" data-flow="${x.id}">Suivre</button>` : ''}</td></tr>`).join('') || `<tr><td colspan="8" class="muted">Aucun courrier dans cette catégorie.</td></tr>`}
+    </tbody></table></div>
+  </div>`;
+  $$('[data-dir]', v).forEach((b) => (b.onclick = () => { PL.flowDir = b.dataset.dir; render(); }));
+  $$('[data-flow]', v).forEach((b) => (b.onclick = () => { const f = all.find((x) => x.id === b.dataset.flow); if (f) flowForm(f); }));
+  const nb = $('#new-flow', v); if (nb) nb.onclick = () => flowForm();
+  sortableTables(v);
+};
+
+function flowForm(f = null) {
+  const st = ['Attendu', 'Envoyé', 'Reçu', 'Validé', 'Refusé'];
+  formModal({ title: f ? 'Suivi du courrier' : 'Enregistrer un courrier', fields: [
+    { name: 'name', label: 'Libellé', required: true, value: f?.name },
+    { name: 'type', label: 'Type', type: 'datalist', options: ['Plan de prévention', 'Compte rendu', 'Attachement', 'Bon de travaux', "Document d'accès", 'Dossier de fin de travaux', "Relevé d'heures", 'Certificat', 'Plan', "Rapport d'intervention", 'Bon de commande', 'Document qualité', 'Autre'], value: f?.type },
+    { name: 'direction', label: 'Sens', type: 'select', options: ['Envoi', 'Réception'], value: f?.direction || PL.flowDir || 'Envoi' },
+    { name: 'to', label: 'Destinataire', value: f?.to }, { name: 'from', label: 'Expéditeur', value: f?.from },
+    { name: 'siteId', label: 'Site', type: 'select', options: [['', '–'], ...sitesList().map((s) => [s.id, s.name])], value: f?.siteId || '' },
+    { name: 'status', label: 'Statut', type: 'select', options: st, value: f?.status || 'Attendu' },
+    { name: 'ack', label: 'Accusé de réception reçu', type: 'checkbox', value: !!f?.ack },
+    { name: 'sentAt', label: 'Date d\'envoi', type: 'date', value: f?.sentAt },
+    { name: 'receivedAt', label: 'Date de réception', type: 'date', value: f?.receivedAt },
+    { name: 'owner', label: 'Responsable du suivi', value: f?.owner },
+    { name: 'notes', label: 'Notes', type: 'textarea', value: f?.notes },
+  ], submitLabel: f ? 'Mettre à jour' : 'Enregistrer', onSubmit: async (vals) => {
+    if (f) await api('PUT', 'docflows/' + f.id, vals); else await api('POST', 'docflows', vals);
+    toast(f ? 'Courrier mis à jour' : 'Courrier enregistré'); await refresh();
+  } });
+}
+
+ROUTES.maintenance = async (v) => {
+  const tab = PL.maintTab || 'plan';
+  const mts = D().maintenances || []; const reps = D().reports || [];
+  const late = maintAlerts();
+  const open = openReports();
+  v.innerHTML = `<div class="head"><div><h1>Maintenance, contrôles et signalements</h1><p class="muted small" style="margin:.3rem 0 0">Maintenances préventives, correctives et contrôles réglementaires, avec les signalements remontés du terrain.</p></div>${!isTech() ? `<div class="row">${tab === 'plan' ? '<button class="btn primary" id="new-maint">+ Planifier une maintenance</button>' : ''}</div>` : ''}</div>
+  <div class="grid g4 section">
+    ${kpi(mts.filter((m) => m.status === 'Planifiée').length, 'Maintenances planifiées', '', '', { icon: 'cal', sub: `${mts.length} au total` })}
+    ${kpi(late.length, 'Échéances sous 7 jours', late.length ? 'warn' : 'ok', '', { icon: 'clock', sub: 'Dont retards' })}
+    ${kpi(open.length, 'Signalements ouverts', open.length ? 'red' : 'ok', '', { icon: 'alert', sub: `${reps.length} signalements tracés` })}
+    ${kpi(mts.filter((m) => m.kind === 'Contrôle réglementaire').length, 'Contrôles réglementaires', '', '', { icon: 'shield', sub: 'Suivi de conformité' })}
+  </div>
+  <div class="card section">
+    <div class="toolbar"><div class="row" style="gap:.4rem">
+      <button class="btn sm ${tab === 'plan' ? 'primary' : ''}" data-tab="plan">Planning des maintenances</button>
+      <button class="btn sm ${tab === 'sig' ? 'primary' : ''}" data-tab="sig">Signalements</button>
+    </div>${tab === 'sig' && !isTech() ? '<span class="muted small" style="margin-left:auto">Traitement réservé à l\'encadrement</span>' : ''}</div>
+    ${tab === 'plan' ? `<div class="table-wrap"><table data-sort><thead><tr><th>Équipement</th><th>Opération</th><th>Nature</th><th>Site</th><th>Échéance</th><th>Intervenant</th><th>Statut</th><th data-nosort></th></tr></thead><tbody>
+      ${mts.slice().sort((a, b) => String(a.dueDate || '').localeCompare(String(b.dueDate || ''))).map((m) => { const eq = DF().equipment.find((x) => x.id === m.equipId); return `<tr><td>${eq ? `<a href="#/equipement/${eq.id}">${esc(eq.name)}</a>` : esc(m.equipId || '–')}</td><td><b>${esc(m.title)}</b></td><td class="small">${esc(m.kind)}</td><td>${sitePill(m.siteId) || '–'}</td><td class="small" data-v="${m.dueDate ? daysUntil(m.dueDate) : ''}">${esc(m.dueDate ? fmtD(m.dueDate) : '–')}${m.dueDate && m.status !== 'Réalisée' && daysUntil(m.dueDate) < 0 ? ' <span class="pill red">Retard</span>' : ''}</td><td class="small">${esc(m.provider || '')}${m.assignee && techById(m.assignee) ? ' · ' + esc(techById(m.assignee).firstName + ' ' + techById(m.assignee).lastName) : ''}</td><td>${maintStatusPill(m.status)}</td><td>${!isTech() ? `<button class="btn sm" data-maint="${m.id}">Suivre</button>` : ''}</td></tr>`; }).join('') || `<tr><td colspan="8" class="muted">Aucune maintenance planifiée.</td></tr>`}
+    </tbody></table></div>` : `<div class="table-wrap"><table data-sort><thead><tr><th>Date</th><th>Équipement</th><th>Type</th><th>Urgence</th><th>Description</th><th>Auteur</th><th>Statut</th><th data-nosort></th></tr></thead><tbody>
+      ${reps.slice().sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || ''))).map((r) => { const eq = DF().equipment.find((x) => x.id === r.equipId); return `<tr><td class="small" data-v="${r.createdAt || ''}">${esc(fmtDT(r.createdAt))}</td><td>${eq ? `<a href="#/equipement/${eq.id}">${esc(eq.name)}</a>` : esc(r.equipId || '–')}</td><td>${esc(r.type)}</td><td>${urgencyPill(r.urgency)}</td><td class="small">${esc(r.description)}</td><td class="small">${esc(r.authorName || r.author || '–')}</td><td>${repStatusPill(r.status)}</td><td>${!isTech() ? `<button class="btn sm" data-rep="${r.id}">Traiter</button>` : ''}</td></tr>`; }).join('') || `<tr><td colspan="8" class="muted">Aucun signalement.</td></tr>`}
+    </tbody></table></div>`}
+  </div>`;
+  $$('[data-tab]', v).forEach((b) => (b.onclick = () => { PL.maintTab = b.dataset.tab; render(); }));
+  $$('[data-maint]', v).forEach((b) => (b.onclick = () => { const m = mts.find((x) => x.id === b.dataset.maint); if (m) maintForm(m); }));
+  $$('[data-rep]', v).forEach((b) => (b.onclick = () => { const r = reps.find((x) => x.id === b.dataset.rep); if (r) reportTreat(r); }));
+  const nb = $('#new-maint', v); if (nb) nb.onclick = () => maintForm();
+  sortableTables(v);
+};
+
+function maintForm(m = null) {
+  formModal({ title: m ? 'Suivi de la maintenance' : 'Planifier une maintenance', fields: [
+    { name: 'equipId', label: 'Équipement', type: 'select', options: DF().equipment.map((e) => [e.id, e.name + ' · ' + e.id]), value: m?.equipId, required: true },
+    { name: 'title', label: 'Opération', required: true, value: m?.title, placeholder: 'Contrôle annuel, thermographie, remplacement…' },
+    { name: 'kind', label: 'Nature', type: 'select', options: ['Préventive', 'Corrective', 'Contrôle réglementaire'], value: m?.kind || 'Préventive' },
+    { name: 'status', label: 'Statut', type: 'select', options: ['Planifiée', 'En cours', 'Réalisée', 'Annulée'], value: m?.status || 'Planifiée' },
+    { name: 'dueDate', label: 'Échéance', type: 'date', value: m?.dueDate },
+    { name: 'doneAt', label: 'Réalisée le', type: 'date', value: m?.doneAt },
+    { name: 'provider', label: 'Organisme / prestataire', value: m?.provider },
+    { name: 'assignee', label: 'Intervenant interne', type: 'select', options: [['', '–'], ...DF().technicians.map((t) => [t.id, t.firstName + ' ' + t.lastName])], value: m?.assignee },
+    { name: 'notes', label: 'Notes', type: 'textarea', value: m?.notes },
+  ], submitLabel: m ? 'Mettre à jour' : 'Planifier', onSubmit: async (vals) => {
+    if (m) await api('PUT', 'maintenances/' + m.id, vals); else await api('POST', 'maintenances', vals);
+    toast(m ? 'Maintenance mise à jour' : 'Maintenance planifiée'); await refresh();
+  } });
+}
+
+function reportForm(eq = null) {
+  formModal({ title: 'Signaler un problème', intro: eq ? `<p class="muted small">Équipement : <b>${esc(eq.name)}</b> (${esc(eq.id)})</p>` : '', fields: [
+    ...(eq ? [] : [{ name: 'equipId', label: 'Équipement', type: 'select', options: [['', '–'], ...DF().equipment.map((x) => [x.id, x.name + ' · ' + x.id])] }]),
+    { name: 'type', label: 'Type', type: 'select', options: ['Panne', 'Dégât', 'Demande de maintenance', 'Demande de réparation', 'Transfert', 'Autre'], value: 'Panne' },
+    { name: 'urgency', label: 'Urgence', type: 'select', options: ['Basse', 'Normale', 'Haute'], value: 'Normale' },
+    { name: 'description', label: 'Description', type: 'textarea', required: true },
+    { name: 'photos', label: 'Photos', type: 'photos', capture: true },
+  ], submitLabel: 'Envoyer le signalement', onSubmit: async (vals) => {
+    await api('POST', 'reports', { ...vals, equipId: eq ? eq.id : vals.equipId });
+    toast('Signalement enregistré'); await refresh();
+  } });
+}
+
+function reportTreat(r) {
+  formModal({ title: 'Traiter le signalement', intro: `<p class="muted small">${esc(r.type)} · ${esc(r.description)}</p>`, fields: [
+    { name: 'status', label: 'Statut', type: 'select', options: ['Ouvert', 'En cours', 'Clos', 'Refusé'], value: r.status },
+    { name: 'resolution', label: 'Résolution / motif', type: 'textarea', value: r.resolution },
+  ], submitLabel: 'Enregistrer', onSubmit: async (vals) => { await api('PUT', 'reports/' + r.id, vals); toast('Signalement mis à jour'); await refresh(); } });
+}
 
 // ---------------- Scanner ----------------
 let camStream = null, scanTimer = null;
@@ -2014,8 +2313,8 @@ ROUTES.reglages = async (v) => {
   v.innerHTML = `<div class="head"><h1>Réglages</h1></div>
   <div class="grid g2">
   <div class="card"><h2>Fiche contact de l'entreprise</h2>
-    <table><tr><th>Raison sociale</th><td><b>MIMOUNI INDUSTRIEL ÉLECTRICITÉ</b><br><span class="muted small">Électricité industrielle</span></td></tr>
-    ${COMPANY_FIELDS.map(([k, l]) => `<tr><th>${esc(l)}</th><td>${co[k] ? esc(co[k]) : '<span class="muted">[À COMPLÉTER]</span>'}</td></tr>`).join('')}</table>
+    <div class="table-wrap"><table><tr><th>Raison sociale</th><td><b>MIMOUNI INDUSTRIEL ÉLECTRICITÉ</b><br><span class="muted small">Électricité industrielle</span></td></tr>
+    ${COMPANY_FIELDS.map(([k, l]) => `<tr><th>${esc(l)}</th><td>${co[k] ? esc(co[k]) : '<span class="muted">[À COMPLÉTER]</span>'}</td></tr>`).join('')}</table></div>
     <button class="btn" id="edit-co" style="margin-top:.6rem">Compléter / modifier</button><p class="muted small">Ces informations apparaissent en pied de page des rapports PDF.</p></div>
   <div class="card"><div class="head"><h2>Utilisateurs et rôles</h2><button class="btn primary sm" id="new-u">+ Compte</button></div>
     <div class="table-wrap"><table><thead><tr><th>Identifiant</th><th>Nom</th><th>Rôle</th><th>Fiche</th><th></th></tr></thead><tbody>
@@ -2024,7 +2323,7 @@ ROUTES.reglages = async (v) => {
   <div class="card"><h2>Sauvegardes</h2><p class="small">Sauvegarde automatique chaque jour (30 conservées) + sauvegarde manuelle à tout moment. Une restauration fait d'abord une sauvegarde de sécurité et n'efface rien.</p>
     <button class="btn dark" id="bk-now">Sauvegarder maintenant</button> <a class="btn" href="#/rapports">Export complet (ZIP)</a>
     <div class="list" style="margin-top:.6rem">${backups.slice(0, 12).map((b) => `<div class="item"><span class="small">${esc(b)}</span><button class="btn sm" data-restore="${esc(b)}">Restaurer</button></div>`).join('') || '<p class="muted small">Aucune sauvegarde pour l\'instant (la première automatique aura lieu cette nuit).</p>'}</div></div>
-  <div class="card"><h2>Données d'exemple</h2><p class="small">Pour essayer le logiciel : 40 techniciens uniquement (4 chefs de chantier, 6 chefs d'équipe, 30 électriciens), tâches, planning, absences et équipements, tous marqués « Exemple ».</p>
+  <div class="card"><h2>Données d'exemple</h2><p class="small">Pour essayer le logiciel : 7 sites (nucléaire et industriel), 80 personnes (chefs de chantier, chefs d'équipe, électriciens, automaticiens…), 14 chantiers, 84 tâches, 65 équipements avec QR, 20 véhicules, la documentation, les courriers, la maintenance et les signalements, tous marqués « Exemple ».</p>
     <div class="row"><button class="btn" id="demo-load">Charger des données d'exemple</button><button class="btn" id="demo-clear">Effacer les données d'exemple</button></div></div>
   </div>`;
   $('#edit-co', v).onclick = () => formModal({ title: 'Fiche contact – MIMOUNI INDUSTRIEL ÉLECTRICITÉ', fields: COMPANY_FIELDS.map(([k, l]) => ({ name: k, label: l, value: co[k] || '', placeholder: '[À COMPLÉTER]' })), onSubmit: async (vals) => { await api('PUT', 'settings/company', vals); toast('Fiche entreprise enregistrée'); refresh(); } });
@@ -2219,7 +2518,7 @@ ROUTES.profil = async (v) => {
   $('#out', v).onclick = () => logout();
 };
 ROUTES.plus = async (v) => {
-  const DESCR = { '#/pointage': 'Saisir et valider les heures', '#/materiel': 'Équipements et interventions', '#/techniciens': 'Fiches, habilitations, rôles', '#/absences': 'Congés, arrêts, disponibilité', '#/rapports': 'Synthèses et exports', '#/alertes': 'Habilitations et retards', '#/journal': "Historique des actions", '#/reglages': 'Entreprise, données, sauvegardes', '#/scanner': 'Identifier un équipement', '#/planning': 'Affectations de la semaine', '#/chantiers': 'Tous les chantiers', '#/vehicules': 'Flotte, affectations, contrôles', '#/habilitations': 'Matrice électrique et nucléaire', '#/temps': 'Heures par mois, site et chantier', '#/sites': 'Paluel, Tricastin, Cruas' };
+  const DESCR = { '#/pointage': 'Saisir et valider les heures', '#/materiel': 'Équipements et interventions', '#/techniciens': 'Fiches, habilitations, rôles', '#/absences': 'Congés, arrêts, disponibilité', '#/rapports': 'Synthèses et exports', '#/alertes': 'Habilitations et retards', '#/journal': "Historique des actions", '#/reglages': 'Entreprise, données, sauvegardes', '#/scanner': 'Identifier un équipement', '#/planning': 'Affectations de la semaine', '#/chantiers': 'Tous les chantiers', '#/vehicules': 'Flotte, affectations, contrôles', '#/habilitations': 'Matrice électrique et nucléaire', '#/temps': 'Heures par mois, site et chantier', '#/sites': 'Tous les sites et leurs indicateurs', '#/documents': 'Bibliothèque technique et sécurité', '#/courriers': 'Envois, réceptions et accusés', '#/maintenance': 'Maintenances, contrôles, signalements' };
   const items = navItems().filter(([href]) => !['#/', '#/chantiers', '#/planning', '#/scanner'].includes(href));
   v.innerHTML = `<div class="head"><h1>Plus</h1><span class="muted small">${esc(S.me.name)} · ${esc(ROLE_LABEL[S.me.role])}</span></div>
   <div class="grid g2">

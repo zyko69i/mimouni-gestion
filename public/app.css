@@ -336,6 +336,7 @@ main {
 }
 .card:hover { box-shadow: var(--shadow-sm); }
 .card h2 { display: flex; align-items: center; gap: .5rem; }
+.card h2 > svg { width: 18px; height: 18px; flex: 0 0 auto; }
 .card h2 .pill { font-size: .66rem; }
 
 .section { margin-bottom: 1.15rem; }
@@ -1109,7 +1110,7 @@ a.item:hover { color: var(--electric); }
 
 /* tableaux en cartes sur mobile */
 @media (max-width: 700px) {
-  .table-wrap { overflow-x: visible; border: 0; background: transparent; border-radius: 0; }
+  .table-wrap { overflow-x: auto; border: 0; background: transparent; border-radius: 0; }
   table.cards thead { display: none; }
   table.cards, table.cards tbody, table.cards tr, table.cards td { display: block; width: 100%; }
   table.cards tr {
@@ -1210,9 +1211,10 @@ a.site-mini { display: block; text-decoration: none; color: inherit; border: 1px
 a.site-mini:hover { border-color: #CFE0F8; box-shadow: var(--shadow-md); }
 .site-card .sc-top { display: flex; align-items: center; gap: .7rem; margin-bottom: .8rem; }
 .site-card .sc-top .kpi-ico { flex: none; }
-.sc-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: .4rem; text-align: center; }
+.sc-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(52px, 1fr)); gap: .4rem; text-align: center; }
 .site-mini .sc-stats { grid-template-columns: repeat(3, 1fr); margin-top: .7rem; }
-.sc-stats > div { background: #F6F9FE; border-radius: 10px; padding: .45rem .2rem; }
+.sc-stats > div { background: #F6F9FE; border-radius: 10px; padding: .45rem .2rem; min-width: 0; }
+.sc-stats span { overflow-wrap: anywhere; }
 .sc-stats b { display: block; font-family: var(--display); font-size: 1.05rem; color: var(--navy); line-height: 1.15; }
 .sc-stats span { font-size: .63rem; color: var(--text-2); text-transform: uppercase; letter-spacing: .03em; }
 

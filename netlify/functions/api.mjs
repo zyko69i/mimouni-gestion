@@ -43,6 +43,15 @@ const ABS_TYPES = ['absence', 'retard', 'congé', 'maladie', 'non-présentation'
 const SLOTS = ['journée', 'matin', 'après-midi'];
 const HAB_KINDS = ['Électrique (NF C 18-510)', 'Nucléaire (RP / SC / HN)', 'CACES', 'AIPR', 'SST', 'Travail en hauteur', 'Autre'];
 const HIST_TYPES = ['intervention', 'remarque', 'photo', 'correction', 'masquage'];
+const EQUIP_FIELDS = ['name', 'type', 'category', 'brand', 'manufacturer', 'reference', 'model', 'serial', 'supplier', 'chantierId', 'siteId', 'zone', 'building', 'local', 'location', 'status', 'criticality', 'function', 'power', 'voltage', 'current', 'dimensions', 'ip', 'elecClass', 'conditions', 'manager', 'userId', 'specs'];
+const EQUIP_MAX = { specs: 1000, conditions: 300, dimensions: 120, function: 150 };
+const EQUIP_DATES = ['commissioned', 'nextControl', 'purchaseDate', 'warrantyUntil'];
+const DOC_STATUS = ['Valide', 'À réviser', 'Remplacé', 'Archivé'];
+const FLOW_STATUS = ['Attendu', 'Envoyé', 'Reçu', 'Validé', 'Refusé', 'Archivé'];
+const MAINT_KINDS = ['Préventive', 'Corrective', 'Contrôle réglementaire'];
+const MAINT_STATUS = ['Planifiée', 'En cours', 'Réalisée', 'Annulée'];
+const REPORT_TYPES = ['Panne', 'Dégât', 'Demande de maintenance', 'Demande de réparation', 'Transfert', 'Autre'];
+const REPORT_STATUS = ['Ouvert', 'En cours', 'Clos', 'Refusé'];
 
 // ---------- Contexte de l'utilisateur et visibilité ----------
 async function authenticate(req) {
@@ -120,7 +129,7 @@ async function login(req) {
 // ---------- Données visibles (chargement initial + copie hors ligne) ----------
 async function bootstrap(user) {
   const sc = await scope(user);
-  const [tasks, absences, equipment, company, sites, vehicles] = await Promise.all([db.list('tasks'), db.list('absences'), db.list('equipment'), db.get('settings', 'company'), db.list('sites'), db.list('vehicles')]);
+  const [tasks, absences, equipment, company, sites, vehicles, documents, docflows, maintenances, reports, movements] = await Promise.all([db.list('tasks'), db.list('absences'), db.list('equipment'), db.get('settings', 'company'), db.list('sites'), db.list('vehicles'), db.list('documents'), db.list('docflows'), db.list('maintenances'), db.list('reports'), db.list('movements')]);
   const visChantiers = sc.chantiers.filter((c) => sc.chantierIds.has(c.id));
   const visTasks = tasks.filter((t) => sc.chantierIds.has(t.chantierId));
   const visTechs = sc.technicians.filter((t) => sc.techIds.has(t.id)).map((t) => redactTech(t, user));
@@ -145,6 +154,15 @@ async function bootstrap(user) {
     timesheets, absences: visAbs, equipment: user.role === 'chef' ? equipment.filter((e) => !e.chantierId || sc.chantierIds.has(e.chantierId)) : equipment, recent,
     sites: sites.sort((a, b) => String(a.name).localeCompare(String(b.name))), vehicles,
   };
+  // Documentation, courriers, maintenance, signalements, mouvements d'équipements
+  // (le chef et le technicien ne voient que les éléments de leurs sites ou non rattachés)
+  const visSites = user.role === 'admin' ? null : new Set(sc.chantiers.map((c) => c.siteId).filter(Boolean));
+  const siteOk = (x) => !visSites || !x.siteId || visSites.has(x.siteId);
+  out.documents = documents.filter(siteOk);
+  out.docflows = docflows.filter(siteOk);
+  out.maintenances = maintenances.filter(siteOk);
+  out.reports = reports.filter(siteOk);
+  out.movements = user.role === 'admin' ? movements : movements.filter(siteOk);
   if (user.role === 'admin') out.users = (await db.list('users')).map(publicUser);
   else out.users = (await db.list('users')).filter((u) => u.role !== 'technicien' || sc.techIds.has(u.technicianId)).map((u) => ({ login: u.login, name: u.name, role: u.role, technicianId: u.technicianId || '' }));
   return ok(out);
@@ -274,7 +292,7 @@ async function loadDemo(user) {
 async function clearDemo(user) {
   let n = 0;
   const demoEq = new Set();
-  for (const c of ['sites', 'technicians', 'chantiers', 'tasks', 'assignments', 'absences', 'equipment', 'vehicles', 'timesheets']) {
+  for (const c of ['sites', 'technicians', 'chantiers', 'tasks', 'assignments', 'absences', 'equipment', 'vehicles', 'timesheets', 'documents', 'docflows', 'maintenances', 'reports', 'movements']) {
     for (const it of await db.list(c)) if (it.demo) { if (c === 'equipment') demoEq.add(it.id); if (c === 'chantiers') demoEq.add('CH-' + it.id); await db.remove(c, it.id); n++; }
   }
   const tl = await db.get('settings', 'timelog'); if (tl && tl.demo) { await db.remove('settings', 'timelog'); n++; }
@@ -589,7 +607,12 @@ async function route(req) {
       if (!isAdmin) return deny('Seul l\'administrateur crée les fiches matériel et leurs QR codes.');
       let id = eqCode();
       while (await db.get('equipment', id)) id = eqCode();
-      const e = { id, name: str(body.name, 150), type: str(body.type, 80), category: str(body.category, 80), brand: str(body.brand, 80), model: str(body.model, 80), serial: str(body.serial, 80), chantierId: str(body.chantierId, 20), siteId: str(body.siteId, 20), zone: str(body.zone, 120), location: str(body.location, 200), status: str(body.status, 40) || 'En service', criticality: str(body.criticality, 20) || 'Standard', commissioned: date(body.commissioned), nextControl: date(body.nextControl), specs: str(body.specs, 1000), createdAt: now(), updatedAt: now(), createdBy: user.login, labelPrints: 0 };
+      const e = { id, createdAt: now(), updatedAt: now(), createdBy: user.login, labelPrints: 0, qrVersion: 1, qrDisabled: false, qrHistory: [] };
+      for (const k of EQUIP_FIELDS) if (body[k] !== undefined) e[k] = str(body[k], EQUIP_MAX[k] || 200);
+      for (const k of EQUIP_DATES) e[k] = date(body[k]);
+      e.name = str(body.name, 150);
+      e.status = str(body.status, 40) || 'En service';
+      e.criticality = str(body.criticality, 20) || 'Standard';
       if (!e.name) return bad('La désignation est obligatoire.');
       await db.put('equipment', e.id, e);
       await log(user, 'équipement créé + QR code', 'équipement', e.id, e.name);
@@ -599,9 +622,8 @@ async function route(req) {
     if (r1 && !r2 && m === 'PUT') {
       if (!isAdmin) return deny('Seul l\'administrateur modifie les informations principales.');
       const e = await db.get('equipment', r1); if (!e) return notFound();
-      for (const k of ['name', 'type', 'category', 'brand', 'model', 'serial', 'chantierId', 'siteId', 'zone', 'location', 'status', 'criticality', 'specs']) if (body[k] !== undefined) e[k] = str(body[k], k === 'specs' ? 1000 : 200);
-      if (body.commissioned !== undefined) e.commissioned = date(body.commissioned);
-      if (body.nextControl !== undefined) e.nextControl = date(body.nextControl);
+      for (const k of EQUIP_FIELDS) if (body[k] !== undefined) e[k] = str(body[k], EQUIP_MAX[k] || 200);
+      for (const k of EQUIP_DATES) if (body[k] !== undefined) e[k] = date(body[k]);
       e.updatedAt = now();
       await db.put('equipment', e.id, e);
       await log(user, 'équipement modifié', 'équipement', e.id);
@@ -613,6 +635,24 @@ async function route(req) {
       e.labelPrints = (e.labelPrints || 0) + 1; e.lastLabelAt = now();
       await db.put('equipment', e.id, e);
       await log(user, 'étiquette imprimée', 'équipement', e.id, 'impression n°' + e.labelPrints);
+      return ok(e);
+    }
+    if (r1 && r2 === 'qr' && m === 'POST') {
+      // Création, régénération, désactivation et réactivation du QR code :
+      // réservées à l'administrateur (webmaster), jamais à un chef ou un technicien.
+      if (!isAdmin) return deny('Seul le webmaster (administrateur) gère les QR codes des équipements.');
+      const e = await db.get('equipment', r1); if (!e) return notFound('Équipement inconnu.');
+      const action = str(body.action, 20);
+      const reason = str(body.reason, 300);
+      if (!['regenerate', 'deactivate', 'reactivate'].includes(action)) return bad('Action QR inconnue.');
+      if (action !== 'regenerate' && !reason) return bad('Le motif est obligatoire pour désactiver ou réactiver un QR code.');
+      e.qrHistory = [...(e.qrHistory || []), { action, at: now(), by: user.login, reason, version: e.qrVersion || 1 }];
+      if (action === 'regenerate') { e.qrVersion = (e.qrVersion || 1) + 1; e.qrDisabled = false; e.qrDisabledAt = ''; e.qrDisabledReason = ''; }
+      if (action === 'deactivate') { e.qrDisabled = true; e.qrDisabledAt = now(); e.qrDisabledReason = reason; }
+      if (action === 'reactivate') { e.qrDisabled = false; e.qrDisabledAt = ''; e.qrDisabledReason = ''; }
+      e.updatedAt = now();
+      await db.put('equipment', e.id, e);
+      await log(user, 'QR code : ' + action, 'équipement', e.id, 'version ' + e.qrVersion);
       return ok(e);
     }
     if (r1 && r2 === 'history' && m === 'GET') {
@@ -715,6 +755,203 @@ async function route(req) {
       await db.remove('vehicles', v.id);
       await log(user, 'véhicule retiré', 'véhicule', v.id, v.plate);
       return ok({ ok: true });
+    }
+    return deny();
+  }
+
+  // ----- Bibliothèque documentaire (électricité, sécurité, nucléaire) -----
+  const siteVisible = async (user2, siteId) => {
+    if (!siteId) return true;
+    if (user2.role === 'admin') return true;
+    const sc2 = await scope(user2);
+    return sc2.chantiers.some((c) => c.siteId === siteId);
+  };
+  if (r0 === 'documents') {
+    if (m === 'GET' && !r1) {
+      const all = await db.list('documents');
+      if (user.role === 'admin') return ok(all);
+      const sc2 = await scope(user); const ids = new Set(sc2.chantiers.map((c) => c.siteId));
+      return ok(all.filter((x) => !x.siteId || ids.has(x.siteId)));
+    }
+    if (m === 'POST' && !r1) {
+      if (!['admin', 'chef'].includes(user.role)) return deny('Seul l\'encadrement ajoute un document.');
+      const doc = {
+        id: 'DOC-' + rid(6), title: str(body.title, 200), category: str(body.category, 60) || 'Électricité',
+        ref: str(body.ref, 80), version: str(body.version, 20) || '1.0', status: DOC_STATUS.includes(body.status) ? body.status : 'Valide',
+        siteId: str(body.siteId, 20), owner: str(body.owner, 80), reviewAt: date(body.reviewAt), notes: str(body.notes, 1000),
+        link: str(body.link, 500), tags: Array.isArray(body.tags) ? body.tags.map((t) => str(t, 40)).slice(0, 10) : [],
+        createdAtTs: now(), updatedAt: now(), createdBy: user.login, history: [],
+      };
+      if (!doc.title) return bad('Le titre du document est obligatoire.');
+      if (!(await siteVisible(user, doc.siteId))) return deny();
+      await db.put('documents', doc.id, doc);
+      await log(user, 'document ajouté', 'document', doc.id, doc.title);
+      return ok(doc);
+    }
+    if (r1 && m === 'PUT') {
+      if (!['admin', 'chef'].includes(user.role)) return deny();
+      const doc = await db.get('documents', r1); if (!doc) return notFound('Document inconnu.');
+      doc.history = [...(doc.history || []), { at: now(), by: user.login, version: doc.version, status: doc.status }].slice(-30);
+      if (body.title !== undefined) doc.title = str(body.title, 200);
+      for (const k of ['category', 'ref', 'version', 'owner', 'notes', 'link', 'siteId']) if (body[k] !== undefined) doc[k] = str(body[k], k === 'notes' ? 1000 : 200);
+      if (body.status && DOC_STATUS.includes(body.status)) doc.status = body.status;
+      if (body.reviewAt !== undefined) doc.reviewAt = date(body.reviewAt);
+      doc.updatedAt = now();
+      await db.put('documents', doc.id, doc);
+      await log(user, 'document modifié', 'document', doc.id, doc.title);
+      return ok(doc);
+    }
+    if (r1 && m === 'DELETE') {
+      if (!isAdmin) return deny('Seul l\'administrateur archive un document.');
+      const doc = await db.get('documents', r1); if (!doc) return notFound();
+      doc.status = 'Archivé'; doc.updatedAt = now();
+      await db.put('documents', doc.id, doc);
+      await log(user, 'document archivé', 'document', doc.id, doc.title);
+      return ok(doc);
+    }
+    return deny();
+  }
+
+  // ----- Courriers et documents administratifs (envois / réceptions) -----
+  if (r0 === 'docflows') {
+    if (m === 'GET' && !r1) {
+      const all = await db.list('docflows');
+      if (user.role === 'admin') return ok(all);
+      const sc2 = await scope(user); const ids = new Set(sc2.chantiers.map((c) => c.siteId));
+      return ok(all.filter((x) => !x.siteId || ids.has(x.siteId)));
+    }
+    if (m === 'POST' && !r1) {
+      if (!['admin', 'chef'].includes(user.role)) return deny('Seul l\'encadrement enregistre un courrier.');
+      const f = {
+        id: 'FLW-' + rid(6), name: str(body.name, 200), type: str(body.type, 60) || 'Autre',
+        direction: body.direction === 'Réception' ? 'Réception' : 'Envoi', to: str(body.to, 120), from: str(body.from, 120),
+        siteId: str(body.siteId, 20), chantierId: str(body.chantierId, 20), status: FLOW_STATUS.includes(body.status) ? body.status : 'Attendu',
+        ack: !!body.ack, version: str(body.version, 20), owner: str(body.owner, 80), notes: str(body.notes, 1000),
+        sentAt: date(body.sentAt), receivedAt: date(body.receivedAt), createdAt: now(), updatedAt: now(), createdBy: user.login, history: [],
+      };
+      if (!f.name) return bad('Le libellé du courrier est obligatoire.');
+      await db.put('docflows', f.id, f);
+      await log(user, 'courrier enregistré', 'courrier', f.id, f.name);
+      return ok(f);
+    }
+    if (r1 && m === 'PUT') {
+      if (!['admin', 'chef'].includes(user.role)) return deny();
+      const f = await db.get('docflows', r1); if (!f) return notFound('Courrier inconnu.');
+      f.history = [...(f.history || []), { at: now(), by: user.login, status: f.status, ack: f.ack }].slice(-30);
+      for (const k of ['name', 'type', 'to', 'from', 'siteId', 'chantierId', 'version', 'owner', 'notes']) if (body[k] !== undefined) f[k] = str(body[k], k === 'notes' ? 1000 : 200);
+      if (body.status && FLOW_STATUS.includes(body.status)) f.status = body.status;
+      if (body.ack !== undefined) f.ack = !!body.ack;
+      for (const k of ['sentAt', 'receivedAt']) if (body[k] !== undefined) f[k] = date(body[k]);
+      f.updatedAt = now();
+      await db.put('docflows', f.id, f);
+      await log(user, 'courrier mis à jour', 'courrier', f.id, f.status);
+      return ok(f);
+    }
+    if (m === 'DELETE') return deny('Un courrier ne s\'efface pas : il peut être archivé.');
+    return deny();
+  }
+
+  // ----- Maintenance et contrôles -----
+  if (r0 === 'maintenances') {
+    if (m === 'GET' && !r1) {
+      const all = await db.list('maintenances');
+      if (user.role === 'admin') return ok(all);
+      const sc2 = await scope(user); const ids = new Set(sc2.chantiers.map((c) => c.siteId));
+      return ok(all.filter((x) => !x.siteId || ids.has(x.siteId)));
+    }
+    if (m === 'POST' && !r1) {
+      if (!['admin', 'chef'].includes(user.role)) return deny('Seul l\'encadrement planifie une maintenance.');
+      const mt = {
+        id: 'MNT-' + rid(6), equipId: str(body.equipId, 30), siteId: str(body.siteId, 20), chantierId: str(body.chantierId, 20),
+        title: str(body.title, 200), kind: MAINT_KINDS.includes(body.kind) ? body.kind : 'Préventive',
+        status: MAINT_STATUS.includes(body.status) ? body.status : 'Planifiée', dueDate: date(body.dueDate), doneAt: date(body.doneAt),
+        assignee: str(body.assignee, 30), provider: str(body.provider, 80), notes: str(body.notes, 1000),
+        createdAt: now(), updatedAt: now(), createdBy: user.login, history: [],
+      };
+      if (!mt.title) return bad('Le libellé de la maintenance est obligatoire.');
+      if (!mt.equipId) return bad('Choisissez l\'équipement concerné.');
+      await db.put('maintenances', mt.id, mt);
+      await log(user, 'maintenance planifiée', 'maintenance', mt.id, mt.title);
+      return ok(mt);
+    }
+    if (r1 && m === 'PUT') {
+      if (!['admin', 'chef'].includes(user.role)) return deny();
+      const mt = await db.get('maintenances', r1); if (!mt) return notFound('Maintenance inconnue.');
+      mt.history = [...(mt.history || []), { at: now(), by: user.login, status: mt.status }].slice(-30);
+      for (const k of ['equipId', 'siteId', 'chantierId', 'title', 'assignee', 'provider', 'notes']) if (body[k] !== undefined) mt[k] = str(body[k], k === 'notes' ? 1000 : 200);
+      if (body.kind && MAINT_KINDS.includes(body.kind)) mt.kind = body.kind;
+      if (body.status && MAINT_STATUS.includes(body.status)) mt.status = body.status;
+      for (const k of ['dueDate', 'doneAt']) if (body[k] !== undefined) mt[k] = date(body[k]);
+      if (mt.status === 'Réalisée' && !mt.doneAt) mt.doneAt = new Date().toISOString().slice(0, 10);
+      mt.updatedAt = now();
+      await db.put('maintenances', mt.id, mt);
+      await log(user, 'maintenance mise à jour', 'maintenance', mt.id, mt.status);
+      return ok(mt);
+    }
+    if (m === 'DELETE') return deny('Une maintenance ne s\'efface pas : elle peut être annulée.');
+    return deny();
+  }
+
+  // ----- Signalements terrain (panne, dégât, demande, transfert) -----
+  if (r0 === 'reports') {
+    if (m === 'GET' && !r1) {
+      const all = await db.list('reports');
+      if (user.role === 'admin') return ok(all);
+      const sc2 = await scope(user); const ids = new Set(sc2.chantiers.map((c) => c.siteId));
+      return ok(all.filter((x) => !x.siteId || ids.has(x.siteId)));
+    }
+    if (m === 'POST' && !r1) {
+      const eq = body.equipId ? await db.get('equipment', body.equipId) : null;
+      if (body.equipId && !eq) return bad('Équipement inconnu.');
+      const rep = {
+        id: 'SIG-' + rid(6), equipId: eq ? eq.id : '', siteId: eq ? eq.siteId || '' : str(body.siteId, 20),
+        type: REPORT_TYPES.includes(body.type) ? body.type : 'Panne',
+        urgency: ['Basse', 'Normale', 'Haute'].includes(body.urgency) ? body.urgency : 'Normale',
+        description: str(body.description, 2000), status: 'Ouvert',
+        author: user.login, authorName: user.name, photos: await savePhotos(body.photos),
+        resolution: '', createdAt: now(), closedAt: '', history: [],
+      };
+      if (!rep.description) return bad('Décrivez le signalement.');
+      await db.put('reports', rep.id, rep);
+      await log(user, 'signalement créé', 'signalement', rep.id, rep.type);
+      return ok(rep);
+    }
+    if (r1 && m === 'PUT') {
+      if (!['admin', 'chef'].includes(user.role)) return deny('Seul l\'encadrement traite un signalement.');
+      const rep = await db.get('reports', r1); if (!rep) return notFound('Signalement inconnu.');
+      rep.history = [...(rep.history || []), { at: now(), by: user.login, status: rep.status }].slice(-30);
+      if (body.status && REPORT_STATUS.includes(body.status)) { rep.status = body.status; rep.closedAt = body.status === 'Clos' ? now() : ''; }
+      if (body.resolution !== undefined) rep.resolution = str(body.resolution, 2000);
+      if (body.urgency && ['Basse', 'Normale', 'Haute'].includes(body.urgency)) rep.urgency = body.urgency;
+      rep.updatedAt = now();
+      await db.put('reports', rep.id, rep);
+      await log(user, 'signalement traité', 'signalement', rep.id, rep.status);
+      return ok(rep);
+    }
+    if (m === 'DELETE') return deny('Un signalement ne s\'efface pas : il est conservé pour la traçabilité.');
+    return deny();
+  }
+
+  // ----- Mouvements d'équipements (transferts entre sites) -----
+  if (r0 === 'movements') {
+    if (m === 'GET' && !r1) return ok(await db.list('movements'));
+    if (m === 'POST' && !r1) {
+      if (!isAdmin) return deny('Seul l\'administrateur enregistre un transfert d\'équipement.');
+      const eq = await db.get('equipment', str(body.equipId, 30));
+      if (!eq) return bad('Équipement inconnu.');
+      const mv = {
+        id: 'MVT-' + rid(6), equipId: eq.id, fromSite: eq.siteId || '', toSite: str(body.toSite, 20),
+        fromLocation: eq.location || '', toLocation: str(body.toLocation, 200), date: date(body.date) || new Date().toISOString().slice(0, 10),
+        author: user.login, note: str(body.note, 500), createdAt: now(),
+      };
+      await db.put('movements', mv.id, mv);
+      eq.siteId = mv.toSite || eq.siteId;
+      if (mv.toLocation) eq.location = mv.toLocation;
+      eq.updatedAt = now();
+      await db.put('equipment', eq.id, eq);
+      await db.appendHistory(eq.id, { id: rid(12), equipId: eq.id, type: 'remarque', content: 'Transfert vers ' + (mv.toSite || 'site inconnu') + ' – ' + mv.toLocation, duration: 0, photos: [], correctsId: '', reason: '', author: user.login, authorName: user.name, authorRole: user.role, at: now(), clientAt: '', clientId: '', offline: false }).catch(() => {});
+      await log(user, 'équipement transféré', 'équipement', eq.id, mv.fromSite + ' → ' + mv.toSite);
+      return ok(mv);
     }
     return deny();
   }
