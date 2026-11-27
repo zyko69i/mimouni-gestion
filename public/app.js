@@ -450,25 +450,28 @@ function renderShell() {
   $('#logout-side').onclick = (e) => { e.preventDefault(); logout(); };
   const side = $('#side');
   const toggle = $('#menu-toggle');
-  let lastScroll = 0;
   toggle.style.opacity = '0';
   toggle.style.pointerEvents = 'none';
-  toggle.style.transition = 'opacity 0.2s ease';
+  let scrollTimer;
   window.addEventListener('scroll', () => {
-    const y = window.scrollY;
-    if (Math.abs(y - lastScroll) > 15) {
+    toggle.style.opacity = '1';
+    toggle.style.pointerEvents = 'auto';
+    clearTimeout(scrollTimer);
+    scrollTimer = setTimeout(() => {
+      if (window.innerWidth < 900 && !document.querySelector('.side.open')) {
+        toggle.style.opacity = '0';
+        toggle.style.pointerEvents = 'none';
+      }
+    }, 1200);
+  }, { passive: true });
+  // Show briefly on load then hide
+  setTimeout(() => {
+    if (window.innerWidth < 900) {
       toggle.style.opacity = '1';
       toggle.style.pointerEvents = 'auto';
-      clearTimeout(toggle._hide);
-      toggle._hide = setTimeout(() => {
-        if (window.innerWidth < 900) {
-          toggle.style.opacity = '0';
-          toggle.style.pointerEvents = 'none';
-        }
-      }, 1800);
+      setTimeout(() => { toggle.style.opacity = '0'; toggle.style.pointerEvents = 'none'; }, 1500);
     }
-    lastScroll = y;
-  }, { passive: true });
+  }, 500);
   toggle.onclick = () => side.classList.toggle('open');
   document.addEventListener('click', (e) => {
     if (window.innerWidth < 900 && side.classList.contains('open') && !side.contains(e.target) && e.target !== toggle) {
