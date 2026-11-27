@@ -450,6 +450,25 @@ function renderShell() {
   $('#logout-side').onclick = (e) => { e.preventDefault(); logout(); };
   const side = $('#side');
   const toggle = $('#menu-toggle');
+  let lastScroll = 0;
+  toggle.style.opacity = '0';
+  toggle.style.pointerEvents = 'none';
+  toggle.style.transition = 'opacity 0.2s ease';
+  window.addEventListener('scroll', () => {
+    const y = window.scrollY;
+    if (Math.abs(y - lastScroll) > 15) {
+      toggle.style.opacity = '1';
+      toggle.style.pointerEvents = 'auto';
+      clearTimeout(toggle._hide);
+      toggle._hide = setTimeout(() => {
+        if (window.innerWidth < 900) {
+          toggle.style.opacity = '0';
+          toggle.style.pointerEvents = 'none';
+        }
+      }, 1800);
+    }
+    lastScroll = y;
+  }, { passive: true });
   toggle.onclick = () => side.classList.toggle('open');
   document.addEventListener('click', (e) => {
     if (window.innerWidth < 900 && side.classList.contains('open') && !side.contains(e.target) && e.target !== toggle) {
@@ -537,7 +556,7 @@ if ('serviceWorker' in navigator) window.addEventListener('load', () => navigato
 document.addEventListener('DOMContentLoaded', start);
 
 // ================= VUES =================
-const kpi = (v, l, cls = '') => `<div class="kpi ${cls}"><div class="v">${v}</div><div class="l">${esc(l)}</div></div>`;
+const kpi = (v, l, cls = '', href = '') => `<a class="kpi ${cls}" ${href ? `href="${href}"` : ''} style="text-decoration:none;color:inherit;display:block;cursor:pointer"><div class="v">${v}</div><div class="l">${esc(l)}</div></a>`;
 const statusPill = (s) => `<span class="pill ${s === 'Terminée' || s === 'Clôturé' ? 'green' : s === 'Bloquée' ? 'red' : s === 'En cours' ? 'dark' : s === 'Annulée' ? '' : s === 'Clôture proposée' ? 'orange' : ''}">${esc(s)}</span>`;
 
 function presentToday() {
@@ -572,24 +591,24 @@ ROUTES.home = async (v) => {
   ${(() => { const n = (d.timesheets || []).filter((f) => f.status === 'Envoyée' && canDecideLocal(f)).length; return n ? `<div class="notice" style="margin-bottom:1rem">${ICON.clock} <b>${n} feuille${n > 1 ? 's' : ''} d'heures à valider</b> – <a href="#/pointage">ouvrir le pointage</a></div>` : ''; })()}
   ${!d.chantiers.length && isAdmin() ? `<div class="notice" style="margin-bottom:1rem">Aucune donnée pour l'instant. Créez vos techniciens et chantiers, ou chargez des données d'exemple dans <a href="#/reglages">Réglages</a>.</div>` : ''}
   <div class="grid g4" style="margin-bottom:1.5rem">
-    ${kpi(pr.total, 'Techniciens')}
-    ${kpi(active.length, 'Chantiers actifs')}
-    ${kpi(pendingTasks.length + S.queue.length, 'Interventions en attente', (pendingTasks.length + S.queue.length) ? 'red' : 'ok')}
-    ${kpi(habs.length + late.length + blocked.length, 'Alertes importantes', (habs.length + late.length + blocked.length) ? 'red' : 'ok')}
+    ${kpi(pr.total, 'Techniciens', '', '#/techniciens')}
+    ${kpi(active.length, 'Chantiers actifs', '', '#/chantiers')}
+    ${kpi(pendingTasks.length + S.queue.length, 'Interventions en attente', (pendingTasks.length + S.queue.length) ? 'red' : 'ok', '#/chantiers')}
+    ${kpi(habs.length + late.length + blocked.length, 'Alertes importantes', (habs.length + late.length + blocked.length) ? 'red' : 'ok', '#/techniciens')}
   </div>
   <div class="grid g3" style="margin-bottom:1.5rem">
-    ${kpi(`${pr.present}/${pr.total}`, 'Présents aujourd\'hui')}
-    ${kpi(late.length, 'Chantiers en retard', late.length ? 'red' : 'ok')}
-    ${kpi(habs.length, 'Habilitations à renouveler', habs.length ? 'red' : 'ok')}
-    ${kpi(h(planned) + ' / ' + h(real), 'Heures prévues / réalisées')}
-    ${kpi(eqCount, 'Équipements')}
-    ${kpi(blocked.length, 'Tâches bloquantes', blocked.length ? 'red' : 'ok')}
+    ${kpi(`${pr.present}/${pr.total}`, 'Présents aujourd\'hui', '', '#/techniciens')}
+    ${kpi(late.length, 'Chantiers en retard', late.length ? 'red' : 'ok', '#/chantiers')}
+    ${kpi(habs.length, 'Habilitations à renouveler', habs.length ? 'red' : 'ok', '#/techniciens')}
+    ${kpi(h(planned) + ' / ' + h(real), 'Heures prévues / réalisées', '', '#/chantiers')}
+    ${kpi(eqCount, 'Équipements', '', '#/materiel')}
+    ${kpi(blocked.length, 'Tâches bloquantes', blocked.length ? 'red' : 'ok', '#/chantiers')}
   </div>
   <div class="grid g2">
     <div class="card"><h2>Avancement des chantiers</h2>${hbars(d.chantiers.filter((c) => c.status !== 'Clôturé').map((c) => ({ l: c.name, v: progressOf(c.id).pct, late: isLate(c) })).sort((a, b) => b.v - a.v))}</div>
     <div class="card"><h2>Répartition des tâches</h2>${donut(['À faire', 'En cours', 'Bloquée', 'Terminée'].map((s, i) => ({ l: s, v: tasks.filter((t) => t.status === s).length, c: ['#94A3B8', '#17365D', '#DC2626', '#16A34A'][i] })))}</div>
     <div class="card"><h2>Heures prévues et réalisées</h2>${groupedBars(d.chantiers.filter((c) => progressOf(c.id).total).map((c) => ({ l: c.name, a: progressOf(c.id).total, b: progressOf(c.id).real })))}</div>
-    <div class="card"><h2>Centre d'alertes</h2>${habs.length || late.length || blocked.length ? `<div class="list">${habs.slice(0,3).map(({ t, hb, st }) => `<div class="item"><span>Habilitation – ${esc(t.firstName + ' ' + t.lastName)}</span><span class="pill ${st.cls}">${esc(st.label)}</span></div>`).join('')}${late.slice(0,2).map(c => `<div class="item"><span>Chantier en retard – ${esc(c.name)}</span><span class="pill red">Retard</span></div>`).join('')}${blocked.slice(0,2).map(t => `<div class="item"><span>Tâche bloquante – ${esc(t.title)}</span><span class="pill red">Bloquée</span></div>`).join('')}</div>` : '<p class="muted">Aucune alerte prioritaire.</p>'}</div>
+    <div class="card"><h2>Centre d'alertes</h2>${habs.length || late.length || blocked.length ? `<div class="list">${habs.slice(0,3).map(({ t, hb, st }) => `<a class="item" href="#/technicien/${t.id}" style="text-decoration:none;color:inherit"><span>Habilitation – ${esc(t.firstName + ' ' + t.lastName)}</span><span class="pill ${st.cls}">${esc(st.label)}</span></a>`).join('')}${late.slice(0,2).map(c => `<a class="item" href="#/chantier/${c.id}" style="text-decoration:none;color:inherit"><span>Chantier en retard – ${esc(c.name)}</span><span class="pill red">Retard</span></a>`).join('')}${blocked.slice(0,2).map(t => `<a class="item" href="#/chantier/${t.chantierId}" style="text-decoration:none;color:inherit"><span>Tâche bloquante – ${esc(t.title)}</span><span class="pill red">Bloquée</span></a>`).join('')}</div>` : '<p class="muted">Aucune alerte prioritaire.</p>'}</div>
     <div class="card"><h2>Habilitations à renouveler</h2>${habs.length ? `<div class="list">${habs.map(({ t, hb, st }) => `<div class="item"><a href="#/technicien/${t.id}">${esc(t.firstName + ' ' + t.lastName)}</a><span>${esc(hb.symbol || hb.kind)} – ${fmtD(hb.expires)} <span class="pill ${st.cls}">${esc(st.label)}</span></span></div>`).join('')}</div>` : '<p class="muted">Aucune habilitation à renouveler dans les 60 jours.</p>'}</div>
     <div class="card"><h2>Activité récente</h2>${recentFeed()}</div>
   </div>`;

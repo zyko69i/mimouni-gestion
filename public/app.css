@@ -53,22 +53,26 @@ h3 { font-size: 1.05rem; margin: 0.3rem 0 0.5rem; font-weight: 600; }
   top: 0.75rem;
   left: 0.75rem;
   z-index: 60;
-  width: 44px;
-  height: 44px;
+  width: 40px;
+  height: 40px;
   border: none;
-  border-radius: 10px;
+  border-radius: 50%;
   background: var(--navy);
   color: #fff;
-  font-size: 1.4rem;
+  font-size: 1.2rem;
   cursor: pointer;
-  box-shadow: var(--ombre);
+  box-shadow: 0 4px 12px rgba(23, 54, 93, 0.25);
   display: flex;
   align-items: center;
   justify-content: center;
+  opacity: 0;
+  pointer-events: none;
 }
 @media (min-width: 900px) {
   .menu-toggle { display: none; }
 }
+.kpi { transition: transform 0.12s ease, box-shadow 0.12s ease; }
+.kpi:hover { transform: translateY(-2px); box-shadow: var(--ombre-hover); }
 
 /* Layout */
 .layout { display: flex; min-height: 100vh; }
