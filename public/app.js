@@ -23,21 +23,33 @@ const ABS_TYPES = ['absence', 'retard', 'congé', 'maladie', 'non-présentation'
 const HAB_KINDS = ['Électrique (NF C 18-510)', 'CACES', 'AIPR', 'SST', 'Autre'];
 
 const ICON = {
-  clock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
-  home: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>',
-  site: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 21h18M5 21V9l7-5 7 5v12M9 21v-6h6v6"/></svg>',
-  scan: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M7 12h10"/></svg>',
-  cal: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>',
-  more: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>',
-  users: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="8" r="3.5"/><path d="M2 20c.8-3.5 3.6-5 7-5s6.2 1.5 7 5M16 4.5a3.5 3.5 0 0 1 0 7M18 15c2 .6 3.4 2.2 4 5"/></svg>',
-  abs: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M9 14l6 4M15 14l-6 4"/></svg>',
-  box: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg>',
-  doc: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 2h9l5 5v15H6zM14 2v6h6M9 13h8M9 17h8"/></svg>',
-  bell: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 16V11a6 6 0 1 1 12 0v5l2 2H4zM10 21h4"/></svg>',
-  list: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8 6h13M8 12h13M8 18h13M3 6h1M3 12h1M3 18h1"/></svg>',
-  gear: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>',
-  user: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="8" r="4"/><path d="M4 21c1-4 4.5-6 8-6s7 2 8 6"/></svg>',
+  clock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7.5V12l3 1.8"/></svg>',
+  home: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 10.5 12 3.8l8.5 6.7V19a1.5 1.5 0 0 1-1.5 1.5h-4.2v-6H9.2v6H5A1.5 1.5 0 0 1 3.5 19z"/></svg>',
+  site: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18M5 21V8.5L12 3l7 5.5V21M9.5 21v-6h5v6"/><path d="M9.5 11h5"/></svg>',
+  scan: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8.5V5.5A1.5 1.5 0 0 1 5.5 4h3M15.5 4h3A1.5 1.5 0 0 1 20 5.5v3M20 15.5v3a1.5 1.5 0 0 1-1.5 1.5h-3M8.5 20h-3A1.5 1.5 0 0 1 4 18.5v-3M7 12h10"/></svg>',
+  cal: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3.2" y="5" width="17.6" height="16" rx="2.4"/><path d="M3.2 10h17.6M8 3v4M16 3v4"/><path d="M7.5 14h2M11 14h2M14.5 14h2M7.5 17.5h2M11 17.5h2"/></svg>',
+  more: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="5" cy="12" r=".6"/><circle cx="12" cy="12" r=".6"/><circle cx="19" cy="12" r=".6"/></svg>',
+  users: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.4"/><path d="M2.8 19.5c.7-3.4 3.4-5 6.2-5s5.5 1.6 6.2 5"/><path d="M16.2 5.2a3.4 3.4 0 0 1 0 6.6M17.6 14.9c2 .6 3.3 2.1 3.8 4.6"/></svg>',
+  abs: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3.2" y="5" width="17.6" height="16" rx="2.4"/><path d="M3.2 10h17.6M8 3v4M16 3v4M9.2 14.2l5.6 3.6M14.8 14.2l-5.6 3.6"/></svg>',
+  box: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12.8 2.4 4 13.4h6.4L9.6 21.6 19 10.2h-6.6z"/></svg>',
+  doc: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2.8h8.4L19.2 8v13.2H6z"/><path d="M14.2 2.8V8h5M9 12.5h7M9 16.2h5"/></svg>',
+  bell: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6 16.5V11a6 6 0 1 1 12 0v5.5l1.6 1.8H4.4zM10 21h4"/></svg>',
+  list: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6h12M9 12h12M9 18h12M4 6h.01M4 12h.01M4 18h.01"/></svg>',
+  gear: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.03 1.56V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1.11-1.56 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.56-1.03H3a2 2 0 1 1 0-4h.09A1.7 1.7 0 0 0 4.65 8.9a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34H9a1.7 1.7 0 0 0 1.03-1.56V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1.03 1.56 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87V9a1.7 1.7 0 0 0 1.56 1.03H21a2 2 0 1 1 0 4h-.09A1.7 1.7 0 0 0 19.4 15z"/></svg>',
+  user: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.6"/><path d="M4.5 20.4c.8-3.6 3.7-5.6 7.5-5.6s6.7 2 7.5 5.6"/></svg>',
+  search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.2 4.2"/></svg>',
+  logout: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4.5h3.5A1.5 1.5 0 0 1 20 6v12a1.5 1.5 0 0 1-1.5 1.5H15M10.5 8l-4 4 4 4M6.5 12H16"/></svg>',
+  bolt: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M13.4 2 5 13.6h5.6L9.4 22 19 10.2h-5.7z"/></svg>',
+  menu: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>',
+  plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
+  chevron: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg>',
+  alert: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5 21 19.5H3z"/><path d="M12 9.5v4.2M12 17h.01"/></svg>',
+  check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 12.5l5 5 10-11"/></svg>',
+  activity: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l2.5-6 5 12 2.5-6h4"/></svg>',
+  pie: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5a8.5 8.5 0 1 0 8.5 8.5H12z"/><path d="M14.5 3.9A8.5 8.5 0 0 1 20.1 9.5h-5.6z"/></svg>',
+  shield: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5.5c0 4.6-3 8-7 9.5-4-1.5-7-4.9-7-9.5V6z"/><path d="M9 12l2 2 4-4"/></svg>',
 };
+
 
 // ---------------- stockage local (IndexedDB) ----------------
 const idb = (() => {
@@ -327,62 +339,114 @@ function assignConflicts(a) {
   if (t) currentHabs(t).forEach((hb) => { if (hb.expires && hb.expires < a.date) out.push('Habilitation ' + hb.symbol + ' expirée'); });
   return out;
 }
+
+function habTable(t, editable = false) {
+  const list = currentHabs(t);
+  if (!list.length) return '<p class="muted">Aucune habilitation enregistrée.</p>';
+  return `<div class="table-wrap"><table><thead><tr><th>Type</th><th>Symbole</th><th>Délivrée</th><th>Fin de validité</th><th>État</th></tr></thead><tbody>
+    ${list.map((hb) => { const st = habStatus(hb); return `<tr ${editable && isAdmin() ? `class="click" data-hab="${esc(hb.id)}"` : ''}><td class="small">${esc(hb.kind || '–')}</td><td><b>${esc(hb.symbol || '–')}</b></td><td class="small">${fmtD(hb.issued)}</td><td class="small">${fmtD(hb.expires)}</td><td><span class="pill ${st.cls}">${esc(st.label)}</span></td></tr>`; }).join('')}
+  </tbody></table></div>`;
+}
 function allConflicts() {
   const from = addDays(todayISO(), -1);
   return D().assignments.filter((a) => a.date >= from).map((a) => ({ a, c: assignConflicts(a) })).filter((x) => x.c.length);
 }
 
 // ---------------- graphiques SVG ----------------
-const PALETTE = ['#C8102E', '#111111', '#8A8D91', '#8E0B20', '#2B2B2B', '#C9CBCE', '#E08A00'];
-function donut(items, { size = 170, center = '' } = {}) {
+const PALETTE = ['#2563EB', '#38BDF8', '#0E9F6E', '#F59E0B', '#7C3AED', '#94A3B8', '#E11D48'];
+function donut(items, { size = 168, center = '', sub = '' } = {}) {
   const total = items.reduce((s, i) => s + i.v, 0);
-  if (!total) return '<p class="muted">Pas encore de données.</p>';
-  const r = 60, cx = size / 2, cy = size / 2, sw = 26; let a0 = -Math.PI / 2; let paths = '';
+  if (!total) return '<div class="empty">Pas encore de données.</div>';
+  const r = 58, cx = size / 2, cy = size / 2, sw = 17;
+  const circ = 2 * Math.PI * r;
+  let off = 0, paths = '';
   items.forEach((it, i) => {
     if (!it.v) return;
-    const frac = it.v / total; const a1 = a0 + frac * Math.PI * 2;
+    const frac = it.v / total;
+    const len = frac * circ;
     const col = it.c || PALETTE[i % PALETTE.length];
-    if (frac >= 0.9999) paths += `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${col}" stroke-width="${sw}"/>`;
-    else { const large = frac > 0.5 ? 1 : 0; paths += `<path d="M${cx + r * Math.cos(a0)} ${cy + r * Math.sin(a0)} A${r} ${r} 0 ${large} 1 ${cx + r * Math.cos(a1)} ${cy + r * Math.sin(a1)}" fill="none" stroke="${col}" stroke-width="${sw}"/>`; }
-    a0 = a1;
+    const dash = Math.max(1, len - (items.filter((x) => x.v > 0).length > 1 ? 5 : 0));
+    paths += `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${col}" stroke-width="${sw}" stroke-linecap="round" stroke-dasharray="${dash} ${circ - dash}" stroke-dashoffset="${-off}" transform="rotate(-90 ${cx} ${cy})"/>`;
+    off += len;
   });
-  const legend = items.map((it, i) => `<span><i style="background:${it.c || PALETTE[i % PALETTE.length]}"></i>${esc(it.l)} : <b>${it.v}</b></span>`).join('');
-  return `<div class="chart" style="display:flex;gap:1rem;align-items:center;flex-wrap:wrap"><svg viewBox="0 0 ${size} ${size}" width="${size}" height="${size}" role="img">${paths}<text x="${cx}" y="${cy + 6}" text-anchor="middle" font-size="20" font-weight="800">${esc(center || total)}</text></svg><div class="legend" style="flex-direction:column">${legend}</div></div>`;
+  const legend = items.map((it, i) => `<span><i style="background:${it.c || PALETTE[i % PALETTE.length]}"></i>${esc(it.l)}<b>${it.v}</b></span>`).join('');
+  return `<div class="chart"><div style="position:relative;flex:none">
+    <svg viewBox="0 0 ${size} ${size}" width="${size}" height="${size}" role="img" aria-label="Répartition">
+      <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="#EEF2F8" stroke-width="${sw}"/>${paths}
+    </svg>
+    <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none">
+      <b style="font-family:var(--display);font-size:1.5rem;line-height:1;letter-spacing:-.03em">${esc(center || total)}</b>
+      ${sub ? `<span style="font-size:.66rem;color:var(--text-3);text-transform:uppercase;letter-spacing:.08em;margin-top:.25rem">${esc(sub)}</span>` : ''}
+    </div></div>
+    <div class="legend" style="flex:1;min-width:140px">${legend}</div></div>`;
 }
 function hbars(items, { unit = '%', max = 100 } = {}) {
-  if (!items.length) return '<p class="muted">Pas encore de données.</p>';
-  return items.map((it) => `<div style="margin:.45rem 0"><div class="row" style="justify-content:space-between"><span class="small"><b>${esc(it.l)}</b></span><span class="small">${esc(String(it.v).replace('.', ','))} ${unit}${it.late ? ' <span class="pill red">En retard</span>' : ''}</span></div><div class="bar"><i style="width:${Math.min(100, (it.v / (max || 1)) * 100)}%;background:${it.late ? '#8E0B20' : '#C8102E'}"></i></div></div>`).join('');
+  if (!items.length) return '<div class="empty">Pas encore de données.</div>';
+  return `<div class="chart-row">${items.map((it) => `<div>
+    <div class="cr-head"><b title="${esc(it.l)}" style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(it.l)}</b>
+    <span>${esc(String(it.v).replace('.', ','))} ${unit}${it.late ? ' · retard' : ''}</span></div>
+    <div class="bar ${it.late ? 'late' : ''}"><i style="width:${Math.min(100, (it.v / (max || 1)) * 100)}%"></i></div></div>`).join('')}</div>`;
 }
 function groupedBars(items) {
-  if (!items.length) return '<p class="muted">Pas encore de données.</p>';
+  if (!items.length) return '<div class="empty">Pas encore de données.</div>';
   const max = Math.max(1, ...items.flatMap((i) => [i.a, i.b]));
-  const W = 560, rowH = 34, H = items.length * rowH + 10, lx = 170;
+  const W = 560, rowH = 44, H = items.length * rowH + 4, lx = 176, bw = W - lx - 62;
   let svg = '';
   items.forEach((it, i) => {
-    const y = 6 + i * rowH; const wa = ((W - lx - 60) * it.a) / max, wb = ((W - lx - 60) * it.b) / max;
-    svg += `<text x="0" y="${y + 17}" font-size="12">${esc(it.l.length > 26 ? it.l.slice(0, 25) + '…' : it.l)}</text>`;
-    svg += `<rect x="${lx}" y="${y}" width="${wa}" height="12" fill="#8A8D91"/><text x="${lx + wa + 4}" y="${y + 10}" font-size="10">${h(it.a)}</text>`;
-    svg += `<rect x="${lx}" y="${y + 14}" width="${wb}" height="12" fill="#C8102E"/><text x="${lx + wb + 4}" y="${y + 24}" font-size="10">${h(it.b)}</text>`;
+    const y = 8 + i * rowH;
+    const wa = ((bw) * it.a) / max, wb = ((bw) * it.b) / max;
+    const lab = it.l.length > 24 ? it.l.slice(0, 23) + '…' : it.l;
+    svg += `<text x="0" y="${y + 15}" font-size="12.5" fill="#0F1B2D">${esc(lab)}</text>`;
+    svg += `<rect x="${lx}" y="${y + 2}" width="${bw}" height="9" rx="4.5" fill="#EEF2F8"/>`;
+    svg += `<rect x="${lx}" y="${y + 2}" width="${Math.max(2, wa)}" height="9" rx="4.5" fill="#CBD8EA"/>`;
+    svg += `<text x="${lx + Math.max(2, wa) + 6}" y="${y + 10}" font-size="10" fill="#8A98AD">${h(it.a)}</text>`;
+    svg += `<rect x="${lx}" y="${y + 16}" width="${bw}" height="9" rx="4.5" fill="#EEF2F8"/>`;
+    svg += `<rect x="${lx}" y="${y + 16}" width="${Math.max(2, wb)}" height="9" rx="4.5" fill="#2563EB"/>`;
+    svg += `<text x="${lx + Math.max(2, wb) + 6}" y="${y + 24}" font-size="10" fill="#2563EB" font-weight="600">${h(it.b)}</text>`;
   });
-  return `<div class="chart"><svg viewBox="0 0 ${W} ${H}" width="100%">${svg}</svg><div class="legend"><span><i style="background:#8A8D91"></i>Heures prévues</span><span><i style="background:#C8102E"></i>Heures réalisées</span></div></div>`;
+  return `<div class="chart" style="flex-direction:column;align-items:stretch;gap:.6rem"><svg viewBox="0 0 ${W} ${H}" width="100%" role="img">${svg}</svg>
+    <div class="legend" style="flex-direction:row;gap:1.2rem"><span><i style="background:#CBD8EA"></i>Heures prévues</span><span><i style="background:#2563EB"></i>Heures réalisées</span></div></div>`;
 }
 
 // ---------------- connexion ----------------
 const brandHTML = () => `<div class="brand"><b>MIMOUNI</b><span class="brand-rest"> INDUSTRIEL ÉLECTRICITÉ</span></div>`;
 function viewLogin(msg = '', equipInfo = null) {
-  $('#app').innerHTML = `<div class="login"><div class="box">
-    <div class="name"><b>MIMOUNI</b><br>INDUSTRIEL ÉLECTRICITÉ</div>
-    <p class="muted small" style="margin-top:.3rem">Logiciel de gestion</p>
-    <p class="login-intro">Connexion pour l'administrateur, les chefs d'équipe et les techniciens. Utilisez l'identifiant et le mot de passe donnés par l'administrateur.</p>
-    ${equipInfo ? `<div class="notice" style="margin:.8rem 0"><b>Accès réservé.</b><br>Équipement : <b>${esc(equipInfo.name)}</b> <span class="muted">(${esc(equipInfo.id)})</span><br>Connectez-vous pour voir la fiche et ajouter une intervention.</div>` : ''}
-    <form id="login-form" novalidate style="margin-top:.6rem">
-      <label class="f">Identifiant<input name="login" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="ex. : admin, prenom.nom"></label>
-      <label class="f">Mot de passe<span class="pw-wrap"><input name="password" type="password" autocomplete="current-password"><button type="button" class="pw-eye" id="pw-eye" aria-label="Afficher le mot de passe" aria-pressed="false">${EYE_OPEN}</button></span></label>
-      <p class="err" id="login-err" role="alert">${esc(msg)}</p>
-      <button class="btn primary bigbtn" type="submit">Se connecter</button>
-    </form>
-    <p class="login-forgot">Mot de passe oublié ? Demandez à l'administrateur.</p>
-  </div></div>`;
+  $('#app').innerHTML = `<div class="login">
+    <section class="login-brand">
+      <div class="lb-top">
+        <div class="brand-mark">${ICON.bolt}</div>
+        <div><b>MIMOUNI</b><span>Industriel Électricité</span></div>
+      </div>
+      <div class="lb-main">
+        <span class="lb-kicker">Logiciel de gestion</span>
+        <h2>Pilotez vos chantiers, vos équipes et vos heures, au même endroit.</h2>
+        <p>Planning, pointage, habilitations, matériel et rapports. Une vue claire sur tout ce qui se passe sur le terrain, pour l'administrateur, les chefs d'équipe et les techniciens.</p>
+        <div class="lb-stats">
+          <div><b>24/7</b><span>Accès terrain</span></div>
+          <div><b>100%</b><span>Centralisé</span></div>
+          <div><b>3</b><span>Niveaux d'accès</span></div>
+        </div>
+      </div>
+      <div class="lb-foot"><span>© ${new Date().getFullYear()} MIMOUNI Industriel Électricité</span><span>Données hébergées en Europe</span></div>
+    </section>
+    <section class="login-panel">
+      <div class="box">
+        <div class="lp-head">
+          <h1>Connexion</h1>
+          <p>Accédez à votre espace de gestion.</p>
+        </div>
+        ${equipInfo ? `<div class="notice" style="margin:0 0 1.1rem">${ICON.shield}<span><b>Accès réservé.</b><br>Équipement : <b>${esc(equipInfo.name)}</b> <span class="muted">(${esc(equipInfo.id)})</span><br>Connectez-vous pour voir la fiche et ajouter une intervention.</span></div>` : ''}
+        <form id="login-form" novalidate>
+          <label class="f">Identifiant<input name="login" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="ex. : admin, prenom.nom"></label>
+          <label class="f">Mot de passe<span class="pw-wrap"><input name="password" type="password" autocomplete="current-password" placeholder="••••••••"><button type="button" class="pw-eye" id="pw-eye" aria-label="Afficher le mot de passe" aria-pressed="false">${EYE_OPEN}</button></span></label>
+          <p class="err" id="login-err" role="alert">${esc(msg)}</p>
+          <button class="btn primary bigbtn" type="submit">Se connecter</button>
+        </form>
+        <p class="login-intro" style="margin-top:1.15rem">Utilisez l'identifiant et le mot de passe donnés par l'administrateur.</p>
+        <p class="login-forgot">Mot de passe oublié ? Demandez à l'administrateur.</p>
+      </div>
+    </section>
+  </div>`;
   const f = $('#login-form');
   $('#pw-eye').onclick = () => {
     const show = f.password.type === 'password';
@@ -424,80 +488,120 @@ async function logout(expired) {
 }
 
 // ---------------- coque de l'application ----------------
-function navItems() {
+function navGroups() {
   const r = S.me.role;
-  const items = [
-    ['#/', 'home', r === 'technicien' ? 'Mon activité' : 'Tableau de bord'],
-    ['#/chantiers', 'site', 'Chantiers'],
-    ['#/planning', 'cal', 'Planning'],
-    ['#/pointage', 'clock', r === 'technicien' ? 'Mes heures' : 'Pointage des heures'],
-    ['#/techniciens', 'users', r === 'technicien' ? 'Ma fiche' : 'Techniciens'],
-    ['#/absences', 'abs', 'Présences et absences'],
-    ['#/materiel', 'box', 'Matériel'],
-    ['#/scanner', 'scan', 'Scanner'],
+  const dashLabel = r === 'technicien' ? 'Mon activité' : 'Tableau de bord';
+  let alertCount = 0;
+  try {
+    if (S.data) alertCount = habAlerts().length + D().chantiers.filter(isLate).length + D().tasks.filter((t) => t.status === 'Bloquée').length;
+  } catch { alertCount = 0; }
+  const groups = [
+    { label: 'Pilotage', items: [
+      ['#/', 'home', dashLabel],
+      ['#/planning', 'cal', 'Planning'],
+      ...(r !== 'technicien' ? [['#/alertes', 'bell', 'Alertes', alertCount]] : []),
+    ] },
+    { label: 'Exploitation', items: [
+      ['#/chantiers', 'site', 'Chantiers'],
+      ['#/pointage', 'clock', r === 'technicien' ? 'Mes heures' : 'Pointage'],
+      ['#/materiel', 'box', 'Matériel'],
+      ['#/scanner', 'scan', 'Scanner'],
+    ] },
+    { label: 'Équipe', items: [
+      ['#/techniciens', 'users', r === 'technicien' ? 'Ma fiche' : 'Techniciens'],
+      ['#/absences', 'abs', 'Présences & absences'],
+    ] },
   ];
-  if (r !== 'technicien') items.push(['#/rapports', 'doc', 'Rapports']);
-  if (r !== 'technicien') items.push(['#/alertes', 'bell', 'Alertes']);
-  if (r === 'admin') items.push(['#/journal', 'list', 'Journal d\'activité'], ['#/reglages', 'gear', 'Réglages']);
-  items.push(['#/profil', 'user', 'Mon profil']);
-  return items;
+  if (r !== 'technicien') {
+    groups.push({ label: 'Administration', items: [
+      ['#/rapports', 'doc', 'Rapports'],
+      ...(r === 'admin' ? [['#/journal', 'list', 'Journal'], ['#/reglages', 'gear', 'Réglages']] : []),
+    ] });
+  }
+  return groups;
 }
+function navItems() { return navGroups().flatMap((g) => g.items.map((x) => [x[0], x[1], x[2]])); }
+const initialsOf = (name) => String(name || '?').replace(/^(M\.|Mme|Monsieur|Madame)\s+/i, '').split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase();
 function renderShell() {
+  const groups = navGroups();
+  const r = S.me.role;
+  const ini = initialsOf(S.me.name);
+  const alertCount = (() => { const a = groups.find((g) => g.label === 'Pilotage'); const it = a && a.items.find((x) => x[0] === '#/alertes'); return it ? it[3] : 0; })();
+  const navHTML = groups.map((g) => `<div class="nav-label">${esc(g.label)}</div>
+    ${g.items.map(([href, ic, lab, badge]) => `<a href="${href}" data-nav="${href}">${ICON[ic]}<span>${esc(lab)}</span>${badge ? `<span class="nav-badge">${badge}</span>` : ''}</a>`).join('')}`).join('');
+  const mobile = r === 'technicien'
+    ? [['#/', 'home', 'Activité'], ['#/pointage', 'clock', 'Mes heures'], null, ['#/planning', 'cal', 'Planning'], ['#/plus', 'more', 'Plus']]
+    : [['#/', 'home', 'Accueil'], ['#/chantiers', 'site', 'Chantiers'], null, ['#/planning', 'cal', 'Planning'], ['#/plus', 'more', 'Plus']];
+  const current = (location.hash || '#/').split('/')[1] || 'home';
   $('#app').innerHTML = `
-  <button class="menu-toggle" id="menu-toggle" aria-label="Menu">☰</button>
   <div class="layout">
-    <nav class="side" id="side">${navItems().map(([href, ic, lab]) => `<a href="${href}" data-nav="${href}">${ICON[ic]}<span>${esc(lab)}</span></a>`).join('')}
-      <div class="sep"></div><div class="small" style="padding:.3rem .7rem;color:#aaa">${esc(S.me.name)}<br>${esc(ROLE_LABEL[S.me.role])}</div>
-      <a href="#" id="logout-side"><span>Se déconnecter</span></a></nav>
-    <main id="view"></main>
+    <aside class="sidebar" id="side">
+      <div class="brand">
+        <div class="brand-mark">${ICON.bolt}</div>
+        <div class="brand-txt"><b>MIMOUNI</b><span>Industriel Électricité</span></div>
+      </div>
+      <nav class="nav">${navHTML}</nav>
+      <div class="side-foot">
+        <div class="side-status">
+          <span class="dot" data-net-dot></span><span data-net-label>En ligne</span>
+          <span class="badge-sync" data-sync>Sauvegardé</span>
+        </div>
+        <div class="user-card">
+          <a href="#/profil" class="row" style="gap:.65rem;flex:1;min-width:0;color:inherit">
+            <span class="avatar">${esc(ini)}</span>
+            <span class="uc-txt"><b>${esc(S.me.name)}</b><span>${esc(ROLE_LABEL[S.me.role])}</span></span>
+          </a>
+          <button class="icon-btn" id="logout-side" title="Se déconnecter" aria-label="Se déconnecter">${ICON.logout}</button>
+        </div>
+      </div>
+    </aside>
+    <div class="scrim" id="scrim"></div>
+    <div class="shell-main">
+      <header class="topbar">
+        <button class="menu-toggle" id="menu-toggle" aria-label="Ouvrir le menu">${ICON.menu}</button>
+        <div class="tb-title">
+          <span class="tb-crumb">MIMOUNI <span class="tb-sep">/</span> <b id="tb-crumb-page">Tableau de bord</b></span>
+          <span class="tb-page" id="tb-page">Tableau de bord</span>
+        </div>
+        <button class="tb-search" id="omni-btn" title="Recherche globale">${ICON.search}<span>Rechercher un chantier, un technicien…</span><kbd>⌘K</kbd></button>
+        <div class="tb-actions">
+          <span class="tb-net"><span class="dot" data-net-dot></span><span data-net-label>En ligne</span><span class="badge-sync" data-sync></span></span>
+          <button class="icon-btn" id="tb-bell" title="Alertes" aria-label="Alertes">${ICON.bell}${alertCount ? `<span class="badge">${alertCount}</span>` : ''}</button>
+          <a class="avatar" href="#/profil" title="${esc(S.me.name)}">${esc(ini)}</a>
+        </div>
+      </header>
+      <main id="view"></main>
+    </div>
+    <nav class="mobilenav">
+      ${mobile.map((m) => m ? `<a href="${m[0]}" data-nav="${m[0]}">${ICON[m[1]]}<span>${esc(m[2])}</span></a>` : `<a href="#/scanner" class="fab-slot" data-nav="#/scanner"><span class="fab">${ICON.scan}</span></a>`).join('')}
+    </nav>
   </div>`;
   $('#logout-side').onclick = (e) => { e.preventDefault(); logout(); };
-  const side = $('#side');
-  const toggle = $('#menu-toggle');
-  toggle.style.opacity = '0';
-  toggle.style.pointerEvents = 'none';
-  let scrollTimer;
-  window.addEventListener('scroll', () => {
-    toggle.style.opacity = '1';
-    toggle.style.pointerEvents = 'auto';
-    clearTimeout(scrollTimer);
-    scrollTimer = setTimeout(async () => {
-      if (window.innerWidth < 900 && !document.querySelector('.side.open')) {
-        toggle.style.opacity = '0';
-        toggle.style.pointerEvents = 'none';
-      }
-    }, 1200);
-  }, { passive: true });
-  // Show briefly on load then hide
-  setTimeout(async () => {
-    if (window.innerWidth < 900) {
-      toggle.style.opacity = '1';
-      toggle.style.pointerEvents = 'auto';
-      setTimeout(async () => { toggle.style.opacity = '0'; toggle.style.pointerEvents = 'none'; }, 1500);
-    }
-  }, 500);
-  toggle.onclick = () => side.classList.toggle('open');
-  document.addEventListener('click', (e) => {
-    if (window.innerWidth < 900 && side.classList.contains('open') && !side.contains(e.target) && e.target !== toggle) {
-      side.classList.remove('open');
-    }
+  const side = $('#side'); const scrim = $('#scrim');
+  const closeSide = () => { side.classList.remove('open'); scrim.classList.remove('show'); };
+  $('#menu-toggle').onclick = () => { side.classList.toggle('open'); scrim.classList.toggle('show', side.classList.contains('open')); };
+  scrim.onclick = closeSide;
+  side.querySelectorAll('a').forEach((a) => a.addEventListener('click', () => { if (window.innerWidth < 960) closeSide(); }));
+  $('#tb-bell').onclick = () => { location.hash = '#/alertes'; };
+  $('#omni-btn').onclick = () => openOmni();
+  document.addEventListener('keydown', (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); openOmni(); }
+    if (e.key === 'Escape') closeSide();
   });
-  side.querySelectorAll('a').forEach(a => a.onclick = () => { if (window.innerWidth < 900) side.classList.remove('open'); });
   paintStatus();
   initAI();
 }
 function paintStatus() {
-  const dot = $('#net-dot'); if (!dot) return;
   const on = navigator.onLine && S.online;
-  dot.className = 'dot' + (S.apiError ? ' err' : on ? '' : ' off');
-  $('#net-label').textContent = S.apiError ? 'Erreur' : on ? 'En ligne' : 'Hors ligne';
-  const b = $('#sync-badge');
+  $$('[data-net-dot]').forEach((dot) => { dot.className = 'dot' + (S.apiError ? ' err' : on ? '' : ' off'); });
+  $$('[data-net-label]').forEach((l) => { l.textContent = S.apiError ? 'Erreur' : on ? 'En ligne' : 'Hors ligne'; });
   const rj = (S.rejected || []).length;
-  if (rj) { b.textContent = rj + ' refusé' + (rj > 1 ? 's' : '') + (S.queue.length ? ' · ' + S.queue.length + ' en attente' : ''); b.className = 'badge-sync rejected'; }
-  else if (S.queue.length) { b.textContent = S.queue.length + ' en attente'; b.className = 'badge-sync pending'; }
-  else { b.textContent = 'Sauvegardé'; b.className = 'badge-sync'; }
+  $$('[data-sync]').forEach((b) => {
+    if (rj) { b.textContent = rj + ' refusé' + (rj > 1 ? 's' : '') + (S.queue.length ? ' · ' + S.queue.length + ' en attente' : ''); b.className = 'badge-sync rejected'; }
+    else if (S.queue.length) { b.textContent = S.queue.length + ' en attente'; b.className = 'badge-sync pending'; }
+    else { b.textContent = 'Sauvegardé'; b.className = 'badge-sync'; }
+  });
 }
-
 // Sur téléphone, chaque ligne de tableau devient une carte (libellé de la colonne devant chaque valeur)
 function cardifyTables(root = document) {
   $$('table', root).forEach((tb) => {
@@ -513,6 +617,62 @@ function cardifyTables(root = document) {
 }
 let cardT = null;
 new MutationObserver(() => { cancelAnimationFrame(cardT); cardT = requestAnimationFrame(() => cardifyTables()); }).observe(document.documentElement, { childList: true, subtree: true });
+
+// ---------------- palette de commandes ----------------
+let omniOpen = false;
+function openOmni() {
+  if (omniOpen) return;
+  omniOpen = true;
+  const items = [];
+  const add = (group, icon, label, sub, href) => items.push({ group, icon, label, sub: sub || '', href });
+  navItems().forEach(([href, ic, lab]) => add('Aller à', ic, lab, '', href));
+  D().chantiers.forEach((c) => add('Chantiers', 'site', c.name, c.client || c.address || '', '#/chantier/' + c.id));
+  D().technicians.slice(0, 40).forEach((t) => add('Techniciens', 'users', t.firstName + ' ' + t.lastName, t.position || '', '#/technicien/' + t.id));
+  D().equipment.slice(0, 40).forEach((e) => add('Matériel', 'box', e.name, e.id, '#/equipement/' + e.id));
+  D().tasks.slice(0, 60).forEach((t) => add('Tâches', 'list', t.title, chantierById(t.chantierId)?.name || '', '#/chantier/' + t.chantierId));
+
+  const bg = document.createElement('div');
+  bg.className = 'cmdk-bg';
+  bg.innerHTML = `<div class="cmdk" role="dialog" aria-label="Recherche globale">
+    <div class="cmdk-input">${ICON.search}<input id="cmdk-q" placeholder="Rechercher un chantier, un technicien, un équipement, une tâche…" autocomplete="off"><kbd>Échap</kbd></div>
+    <div class="cmdk-list" id="cmdk-list"></div>
+    <div class="cmdk-foot"><span><kbd>↑</kbd> <kbd>↓</kbd> naviguer</span><span><kbd>↵</kbd> ouvrir</span><span style="margin-left:auto">${D().chantiers.length} chantiers · ${D().technicians.length} techniciens · ${D().equipment.length} équipements</span></div>
+  </div>`;
+  document.body.appendChild(bg);
+  const input = bg.querySelector('#cmdk-q');
+  const list = bg.querySelector('#cmdk-list');
+  const norm = (v) => String(v || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  let filtered = items.slice(0, 40); let sel = 0;
+  const close = () => { omniOpen = false; bg.remove(); };
+  const go = (it) => { close(); location.hash = it.href; };
+  const draw = () => {
+    if (!filtered.length) { list.innerHTML = '<div class="empty">Aucun résultat.</div>'; return; }
+    let html = ''; let last = '';
+    filtered.forEach((it, i) => {
+      if (it.group !== last) { html += `<div class="cmdk-group">${esc(it.group)}</div>`; last = it.group; }
+      html += `<div class="cmdk-item ${i === sel ? 'sel' : ''}" data-i="${i}">${ICON[it.icon] || ICON.list}<span>${esc(it.label)}</span>${it.sub ? `<span class="ci-sub">${esc(it.sub)}</span>` : ''}</div>`;
+    });
+    list.innerHTML = html;
+    const el = list.querySelector('.cmdk-item.sel'); if (el) el.scrollIntoView({ block: 'nearest' });
+  };
+  const filter = () => {
+    const q = norm(input.value).trim();
+    const words = q.split(/\s+/).filter(Boolean);
+    filtered = items.filter((it) => { const hay = norm(it.label + ' ' + it.sub + ' ' + it.group); return words.every((w) => hay.includes(w)); }).slice(0, 40);
+    sel = 0; draw();
+  };
+  input.oninput = filter;
+  input.onkeydown = (e) => {
+    if (e.key === 'ArrowDown') { e.preventDefault(); sel = Math.min(filtered.length - 1, sel + 1); draw(); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); sel = Math.max(0, sel - 1); draw(); }
+    else if (e.key === 'Enter') { e.preventDefault(); if (filtered[sel]) go(filtered[sel]); }
+    else if (e.key === 'Escape') { e.preventDefault(); close(); }
+  };
+  bg.addEventListener('click', (e) => { if (e.target === bg) close(); });
+  list.addEventListener('click', (e) => { const row = e.target.closest('[data-i]'); if (row) go(filtered[Number(row.dataset.i)]); });
+  draw(); setTimeout(() => input.focus(), 20);
+}
+
 const ROUTES = {};
 async function render() {
   if (!S.me) return;
@@ -520,7 +680,13 @@ async function render() {
   const hash = location.hash || '#/';
   const [, name = '', id = ''] = hash.split('/');
   const key = name || 'home';
-  $$('[data-nav]').forEach((a) => { const n = a.dataset.nav.split('/')[1] || 'home'; const map = { chantier: 'chantiers', technicien: 'techniciens', equipement: 'materiel' }; a.classList.toggle('active', n === (map[key] || key)); });
+  const map = { chantier: 'chantiers', technicien: 'techniciens', equipement: 'materiel', plus: 'plus' };
+  const activeKey = map[key] || key;
+  $$('[data-nav]').forEach((a) => { const n = a.dataset.nav.split('/')[1] || 'home'; a.classList.toggle('active', n === activeKey); });
+  const PAGE_LABEL = { home: isTech() ? 'Mon activité' : 'Tableau de bord', chantiers: 'Chantiers', chantier: 'Chantier', planning: 'Planning', pointage: 'Pointage des heures', techniciens: 'Techniciens', technicien: 'Fiche technicien', absences: 'Présences & absences', materiel: 'Matériel', equipement: 'Équipement', scanner: 'Scanner', rapports: 'Rapports', alertes: 'Alertes', journal: "Journal d'activité", reglages: 'Réglages', profil: 'Mon profil', plus: 'Plus', envois: 'Envois refusés' };
+  const label = PAGE_LABEL[key] || 'Gestion';
+  const elPage = $('#tb-page'); if (elPage) elPage.textContent = label;
+  const elCrumb = $('#tb-crumb-page'); if (elCrumb) elCrumb.textContent = label;
   const view = $('#view');
   const fn = ROUTES[key] || ROUTES.home;
   try { await fn(view, decodeURIComponent(id)); }
@@ -564,7 +730,9 @@ if ('serviceWorker' in navigator) window.addEventListener('load', () => navigato
 document.addEventListener('DOMContentLoaded', start);
 
 // ================= VUES =================
-const kpi = (v, l, cls = '', href = '') => `<a class="kpi ${cls}" ${href ? `href="${href}"` : ''} style="text-decoration:none;color:inherit;display:block;cursor:pointer"><div class="v">${v}</div><div class="l">${esc(l)}</div></a>`;
+const kpi = (v, l, cls = '', href = '', opts = {}) => `<a class="kpi ${cls}" ${href ? `href="${href}"` : ''} style="text-decoration:none;color:inherit">
+  <div class="kpi-top"><span class="kpi-ico">${ICON[opts.icon || 'pie'] || ICON.pie}</span>${opts.pill ? `<span class="pill ${opts.pillCls || ''}">${esc(opts.pill)}</span>` : ''}</div>
+  <div class="v">${v}</div><div class="l">${esc(l)}</div>${opts.sub ? `<div class="sub">${opts.sub}</div>` : ''}</a>`;
 const statusPill = (s) => `<span class="pill ${s === 'Terminée' || s === 'Clôturé' ? 'green' : s === 'Bloquée' ? 'red' : s === 'En cours' ? 'dark' : s === 'Annulée' ? '' : s === 'Clôture proposée' ? 'orange' : ''}">${esc(s)}</span>`;
 
 function seniority(entryDate) {
@@ -605,44 +773,116 @@ ROUTES.home = async (v) => {
   const planned = d.chantiers.reduce((s, c) => s + progressOf(c.id).total, 0);
   const real = d.chantiers.reduce((s, c) => s + progressOf(c.id).real, 0);
   const gap = d.chantiers.reduce((s, c) => s + progressOf(c.id).gap, 0);
-  const month = day.slice(0, 7);
-  const absMonth = d.absences.filter((a) => (a.start || '').slice(0, 7) === month || (a.end || '').slice(0, 7) === month);
-  const absCount = {}; absMonth.forEach((a) => { const l = absLabel(a); absCount[l] = (absCount[l] || 0) + 1; });
-  const conflicts = allConflicts();
-  const eqCount = d.equipment.length;
-  const pendingInter = (d.recent || []).filter(e => e.type === 'intervention' && !e.done).length || pendingTasks.length;
+  const todayAssign = d.assignments.filter((a) => a.date === day);
+  const toValidate = (d.timesheets || []).filter((f) => f.status === 'Envoyée' && canDecideLocal(f));
+  const hr = new Date().getHours();
+  const greet = hr < 12 ? 'Bonjour' : hr < 18 ? 'Bon après-midi' : 'Bonsoir';
+  const firstName = String(S.me.name || '').replace(/^(M\.|Mme|Monsieur|Madame)\s+/i, '').split(/\s+/)[0] || '';
+  const attention = pendingTasks.length + habs.length + blocked.length + late.length;
+  const heroStats = `
+    <div class="hero-stats">
+      <div><b>${active.length}</b><span>Chantiers actifs</span></div>
+      <div><b>${pr.present}/${pr.total}</b><span>Sur le terrain</span></div>
+      <div><b>${pendingTasks.length}</b><span>En retard</span></div>
+    </div>`;
+  const todayRows = todayAssign.length
+    ? `<div class="list">${todayAssign.slice(0, 6).map((a) => { const t = techById(a.techId); const c = chantierById(a.chantierId); return `<a class="item" href="${c ? '#/chantier/' + c.id : '#/planning'}" style="text-decoration:none;color:inherit">
+        <span class="avatar" style="width:30px;height:30px;font-size:.7rem">${esc(initialsOf(t ? t.firstName + ' ' + t.lastName : '?'))}</span>
+        <span style="flex:1;min-width:0"><b>${esc(t ? t.firstName + ' ' + t.lastName : 'Technicien')}</b><br><span class="muted small">${esc(c ? c.name : 'Non affecté')}</span></span>
+        <span class="pill dark">${esc(a.slot || 'Journée')}</span></a>`; }).join('')}</div>`
+    : '<div class="empty">Aucune affectation aujourd\'hui.</div>';
+  const alertsRows = (() => {
+    const rows = [];
+    habs.slice(0, 3).forEach(({ t, hb, st }) => rows.push(`<a class="item" href="#/technicien/${t.id}" style="text-decoration:none;color:inherit"><span style="flex:1;min-width:0">${ICON.shield}<b>${esc(t.firstName + ' ' + t.lastName)}</b> – ${esc(hb.symbol || hb.kind)}</span><span class="pill ${st.cls}">${esc(st.label)}</span></a>`));
+    late.slice(0, 2).forEach((c) => rows.push(`<a class="item" href="#/chantier/${c.id}" style="text-decoration:none;color:inherit"><span style="flex:1;min-width:0">${ICON.site}<b>${esc(c.name)}</b> – échéance dépassée</span><span class="pill red">Retard</span></a>`));
+    blocked.slice(0, 2).forEach((t) => rows.push(`<a class="item" href="#/chantier/${t.chantierId}" style="text-decoration:none;color:inherit"><span style="flex:1;min-width:0">${ICON.alert}<b>${esc(t.title)}</b> – tâche bloquée</span><span class="pill red">Bloquée</span></a>`));
+    return rows.length ? `<div class="list">${rows.join('')}</div>` : `<div class="empty">${ICON.check}Aucune alerte prioritaire. Tout est sous contrôle.</div>`;
+  })();
   v.innerHTML = `
-  <div class="head"><h1>Tableau de bord</h1><span class="muted small">${isChef() ? 'Vos chantiers et votre équipe' : 'Vue globale de l\'entreprise'} – ${fmtD(day)}</span></div>
-  ${(() => { const n = (d.timesheets || []).filter((f) => f.status === 'Envoyée' && canDecideLocal(f)).length; return n ? `<div class="notice" style="margin-bottom:1rem">${ICON.clock} <b>${n} feuille${n > 1 ? 's' : ''} d'heures à valider</b> – <a href="#/pointage">ouvrir le pointage</a></div>` : ''; })()}
-  ${!d.chantiers.length && isAdmin() ? `<div class="notice" style="margin-bottom:1rem">Aucune donnée pour l'instant. Créez vos techniciens et chantiers, ou chargez des données d'exemple dans <a href="#/reglages">Réglages</a>.</div>` : ''}
-  <div class="grid g4" style="margin-bottom:1.5rem">
-    ${kpi(pr.total, 'Techniciens', '', '#/techniciens')}
-    ${kpi(active.length, 'Chantiers actifs', '', '#/chantiers')}
-    ${kpi(pendingTasks.length, 'Tâches en retard', pendingTasks.length ? 'red' : 'ok', '#/chantiers')}
-    ${kpi(habs.length, 'Habilitations à renouveler', habs.length ? 'red' : 'ok', '#/techniciens')}
+  <section class="hero">
+    <div class="hero-main">
+      <span class="eyebrow">${fmtD(day)} · ${isChef() ? 'Vos chantiers' : "Vue d'ensemble de l'entreprise"}</span>
+      <h1>${esc(greet)}, ${esc(firstName)}</h1>
+      <p class="hero-sub">${active.length} chantier${active.length > 1 ? 's' : ''} en cours · ${pr.present} technicien${pr.present > 1 ? 's' : ''} sur le terrain · ${attention ? attention + ' point' + (attention > 1 ? 's' : '') + " d'attention" : 'aucun point bloquant'}</p>
+    </div>
+    <div class="hero-side">
+      <div class="hero-actions">
+        ${isAdmin() ? `<button class="btn primary" id="home-new-ch">${ICON.plus} Nouveau chantier</button>` : ''}
+        <a class="btn" href="#/pointage">${ICON.clock} Pointer</a>
+        <a class="btn" href="#/scanner">${ICON.scan} Scanner</a>
+      </div>
+      ${heroStats}
+    </div>
+  </section>
+  ${toValidate.length ? `<div class="notice" style="margin-bottom:1rem">${ICON.clock}<span><b>${toValidate.length} feuille${toValidate.length > 1 ? 's' : ''} d'heures à valider</b> – <a href="#/pointage">ouvrir le pointage</a></span></div>` : ''}
+  ${!d.chantiers.length && isAdmin() ? `<div class="notice" style="margin-bottom:1rem">${ICON.alert}<span>Aucune donnée pour l'instant. Créez vos techniciens et chantiers, ou chargez des données d'exemple dans <a href="#/reglages">Réglages</a>.</span></div>` : ''}
+  <div class="grid g4 section">
+    ${kpi(active.length, 'Chantiers actifs', '', '#/chantiers', { icon: 'site', pill: late.length ? late.length + ' en retard' : 'À jour', pillCls: late.length ? 'red' : 'green', sub: `${d.chantiers.length} chantiers au total` })}
+    ${kpi(`${pr.present}<small>/${pr.total}</small>`, "Présents aujourd'hui", '', '#/planning', { icon: 'users', sub: `${pr.absents} absence${pr.absents > 1 ? 's' : ''} déclarée${pr.absents > 1 ? 's' : ''}` })}
+    ${kpi(pendingTasks.length, 'Tâches en retard', pendingTasks.length ? 'red' : 'ok', '#/chantiers', { icon: 'clock', sub: `${tasks.length} tâches ouvertes` })}
+    ${kpi(habs.length, 'Habilitations à renouveler', habs.length ? 'warn' : 'ok', '#/techniciens', { icon: 'shield', sub: 'Sous 60 jours' })}
   </div>
-  <div class="grid g3" style="margin-bottom:1.5rem">
-    ${kpi(`${pr.present}/${pr.total}`, 'Présents (affectés et non absents)', '', '#/planning')}
-    ${kpi(pr.absents, 'Absents aujourd\'hui', pr.absents ? 'red' : 'ok', '#/absences')}
-    ${kpi(late.length, 'Chantiers en retard', late.length ? 'red' : 'ok', '#/chantiers')}
-    ${kpi(h(planned) + ' / ' + h(real), 'Heures prévues / réalisées', '', '#/chantiers')}
-    ${kpi(eqCount, 'Équipements', '', '#/materiel')}
-    ${kpi(blocked.length, 'Tâches bloquantes', blocked.length ? 'red' : 'ok', '#/chantiers')}
+  <div class="grid g23 section">
+    <div class="card">
+      <h2>${ICON.activity} Avancement des chantiers <a class="pill" href="#/chantiers" style="margin-left:auto;text-decoration:none">Tout voir</a></h2>
+      <p class="muted small" style="margin:-.3rem 0 .9rem">Part du volume horaire réalisé sur chaque chantier ouvert.</p>
+      ${hbars(d.chantiers.filter((c) => c.status !== 'Clôturé').map((c) => ({ l: c.name, v: progressOf(c.id).pct, late: isLate(c) })).sort((a, b) => b.v - a.v))}
+    </div>
+    <div class="card">
+      <h2>${ICON.pie} Répartition des tâches</h2>
+      <p class="muted small" style="margin:-.3rem 0 .9rem">${tasks.length} tâches suivies</p>
+      ${donut(['À faire', 'En cours', 'Bloquée', 'Terminée'].map((st, i) => ({ l: st, v: tasks.filter((t) => t.status === st).length, c: ['#94A3B8', '#2563EB', '#DC2626', '#0E9F6E'][i] })), { center: tasks.length, sub: 'tâches' })}
+    </div>
   </div>
-  <div class="grid g2">
-    <div class="card"><h2>Avancement des chantiers</h2>${hbars(d.chantiers.filter((c) => c.status !== 'Clôturé').map((c) => ({ l: c.name, v: progressOf(c.id).pct, late: isLate(c) })).sort((a, b) => b.v - a.v))}</div>
-    <div class="card"><h2>Répartition des tâches</h2>${donut(['À faire', 'En cours', 'Bloquée', 'Terminée'].map((s, i) => ({ l: s, v: tasks.filter((t) => t.status === s).length, c: ['#94A3B8', '#17365D', '#DC2626', '#16A34A'][i] })))}</div>
-    <div class="card"><h2>Heures prévues et réalisées</h2>${groupedBars(d.chantiers.filter((c) => progressOf(c.id).total).map((c) => ({ l: c.name, a: progressOf(c.id).total, b: progressOf(c.id).real })))}</div>
-    <div class="card"><h2>Centre d'alertes</h2>${habs.length || late.length || blocked.length ? `<div class="list">${habs.slice(0,3).map(({ t, hb, st }) => `<a class="item" href="#/technicien/${t.id}" style="text-decoration:none;color:inherit"><span>Habilitation – ${esc(t.firstName + ' ' + t.lastName)}</span><span class="pill ${st.cls}">${esc(st.label)}</span></a>`).join('')}${late.slice(0,2).map(c => `<a class="item" href="#/chantier/${c.id}" style="text-decoration:none;color:inherit"><span>Chantier en retard – ${esc(c.name)}</span><span class="pill red">Retard</span></a>`).join('')}${blocked.slice(0,2).map(t => `<a class="item" href="#/chantier/${t.chantierId}" style="text-decoration:none;color:inherit"><span>Tâche bloquante – ${esc(t.title)}</span><span class="pill red">Bloquée</span></a>`).join('')}</div>` : '<p class="muted">Aucune alerte prioritaire.</p>'}</div>
-    <div class="card"><h2>Habilitations à renouveler</h2>${habs.length ? `<div class="list">${habs.map(({ t, hb, st }) => `<div class="item"><a href="#/technicien/${t.id}">${esc(t.firstName + ' ' + t.lastName)}</a><span>${esc(hb.symbol || hb.kind)} – ${fmtD(hb.expires)} <span class="pill ${st.cls}">${esc(st.label)}</span></span></div>`).join('')}</div>` : '<p class="muted">Aucune habilitation à renouveler dans les 60 jours.</p>'}</div>
-    <div class="card"><h2>Activité récente</h2>${recentFeed()}</div>
+  <div class="grid g23 section">
+    <div class="card">
+      <h2>${ICON.cal} Aujourd'hui sur le terrain <a class="pill" href="#/planning" style="margin-left:auto;text-decoration:none">Planning</a></h2>
+      <p class="muted small" style="margin:-.3rem 0 .9rem">${todayAssign.length} affectation${todayAssign.length > 1 ? 's' : ''} · ${pr.present} présent${pr.present > 1 ? 's' : ''} · ${pr.absents} absent${pr.absents > 1 ? 's' : ''}</p>
+      ${todayRows}
+    </div>
+    <div class="card">
+      <h2>${ICON.bell} Alertes à traiter ${attention ? `<span class="pill red" style="margin-left:auto">${attention}</span>` : ''}</h2>
+      <p class="muted small" style="margin:-.3rem 0 .9rem">Habilitations, retards et blocages.</p>
+      ${alertsRows}
+    </div>
+  </div>
+  <div class="grid g2 section">
+    <div class="card">
+      <h2>${ICON.clock} Heures prévues et réalisées</h2>
+      <p class="muted small" style="margin:-.3rem 0 .9rem">${h(planned)} h prévues · ${h(real)} h réalisées · ${gap > 0 ? h(gap) + ' h de retard' : 'aucun écart'}</p>
+      ${groupedBars(d.chantiers.filter((c) => progressOf(c.id).total).map((c) => ({ l: c.name, a: progressOf(c.id).total, b: progressOf(c.id).real })))}
+    </div>
+    <div class="card">
+      <h2>${ICON.shield} Habilitations à renouveler</h2>
+      <p class="muted small" style="margin:-.3rem 0 .9rem">Échéances des 60 prochains jours.</p>
+      ${habs.length ? `<div class="list">${habs.map(({ t, hb, st }) => `<a class="item" href="#/technicien/${t.id}" style="text-decoration:none;color:inherit"><span style="flex:1;min-width:0"><b>${esc(t.firstName + ' ' + t.lastName)}</b><br><span class="muted small">${esc(hb.symbol || hb.kind)} – ${fmtD(hb.expires)}</span></span><span class="pill ${st.cls}">${esc(st.label)}</span></a>`).join('')}</div>` : `<div class="empty">${ICON.check}Aucune habilitation à renouveler dans les 60 jours.</div>`}
+    </div>
+  </div>
+  <div class="card section">
+    <h2>${ICON.list} Activité récente <a class="pill" href="#/journal" style="margin-left:auto;text-decoration:none">Journal</a></h2>
+    ${recentFeed()}
   </div>`;
+  const b = $('#home-new-ch'); if (b) b.onclick = () => chantierForm();
 };
 
+const EV_META = { intervention: { ic: 'scan', cls: 'dark' }, correction: { ic: 'check', cls: 'warn' }, masquage: { ic: 'alert', cls: '' } };
 function recentFeed() {
   const r = D().recent || [];
-  if (!r.length) return '<p class="muted">Aucune intervention pour l\'instant.</p>';
-  return `<div class="timeline">${r.map((e) => { const eq = D().equipment.find((x) => x.id === e.equipId); const ch = e.chantierId ? chantierById(e.chantierId) : null; const link = eq ? `<a href="#/equipement/${eq.id}">${esc(eq.name)}</a>` : ch ? `<a href="#/chantier/${ch.id}">${esc(ch.name)}</a>` : ''; return `<div class="ev ${e.type}"><b>${esc(e.type)}</b> – ${link}<br><span class="small">${esc((e.content || '').slice(0, 90))}${e.photos && e.photos.length ? ' · ' + e.photos.length + ' photo(s)' : ''}</span><br><span class="muted small">${esc(e.authorName || e.author)} · ${fmtDT(e.at)}</span></div>`; }).join('')}</div>`;
+  if (!r.length) return '<div class="empty">Aucune intervention pour l\'instant.</div>';
+  return `<div class="timeline">${r.map((e) => {
+    const eq = D().equipment.find((x) => x.id === e.equipId);
+    const ch = e.chantierId ? chantierById(e.chantierId) : null;
+    const target = eq ? `<a href="#/equipement/${eq.id}">${esc(eq.name)}</a>` : ch ? `<a href="#/chantier/${ch.id}">${esc(ch.name)}</a>` : '';
+    const m = EV_META[e.type] || { ic: 'list', cls: '' };
+    return `<div class="ev ${esc(e.type)}">
+      <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap">
+        <span class="kpi-ico" style="width:26px;height:26px;border-radius:8px">${ICON[m.ic] || ICON.list}</span>
+        <b style="text-transform:capitalize">${esc(e.type)}</b>${target ? ' · ' + target : ''}
+        ${e.photos && e.photos.length ? `<span class="pill" style="margin-left:auto">${ICON.doc} ${e.photos.length}</span>` : ''}
+      </div>
+      <div class="small">${esc((e.content || '').slice(0, 140))}</div>
+      <div class="muted small">${esc(e.authorName || e.author)} · ${fmtDT(e.at)}</div></div>`;
+  }).join('')}</div>`;
 }
 
 async function viewMyActivity(v) {
@@ -650,16 +890,46 @@ async function viewMyActivity(v) {
   const t = techById(tid);
   const myTasks = D().tasks.filter((x) => x.assignee === tid && !['Terminée', 'Annulée'].includes(x.status));
   const week = D().assignments.filter((a) => a.techId === tid && a.date >= day && a.date <= addDays(day, 7)).sort((a, b) => a.date.localeCompare(b.date));
-  v.innerHTML = `<div class="head"><h1>Mon activité</h1><span class="muted small">${esc(me.name)}</span></div>
-  <a class="btn primary bigbtn" href="#/scanner" style="margin-bottom:.6rem">${ICON.scan} Scanner un équipement</a>
-  <a class="btn dark bigbtn" href="#/pointage" style="margin-bottom:1rem">${ICON.clock} Pointer mes heures du jour</a>
-  ${(() => { const ref = (D().timesheets || []).filter((f) => f.techId === tid && f.status === 'Refusée'); return ref.length ? `<div class="notice" style="margin-bottom:1rem"><b>${ref.length} feuille${ref.length > 1 ? 's' : ''} d'heures refusée${ref.length > 1 ? 's' : ''}</b> : <a href="#/pointage">corriger et renvoyer</a>.</div>` : ''; })()}
-  ${!tid ? '<div class="notice">Votre compte n\'est pas encore relié à une fiche technicien. Prévenez l\'administrateur.</div>' : ''}
-  <div class="grid g2">
-  <div class="card"><h2>Mes tâches en cours</h2>${myTasks.map((x) => `<div class="list"><div class="item"><a href="#/chantier/${x.chantierId}">${esc(x.title)}</a><span>${statusPill(x.status)}</span></div></div>`).join('') || '<p class="muted">Aucune tâche.</p>'}</div>
-  <div class="card"><h2>Mon planning (7 jours)</h2>${week.map((a) => `<div class="list"><div class="item"><span>${fmtD(a.date)} · ${esc(a.slot)}</span><span>${esc(chantierById(a.chantierId)?.name || '–')}</span></div></div>`).join('') || '<p class="muted">Rien de prévu.</p>'}</div>
-  <div class="card"><h2>Mes habilitations</h2>${t ? habTable(t) : '–'}</div>
-  <div class="card"><h2>Activité récente</h2>${recentFeed()}</div></div>`;
+  const todayAs = D().assignments.filter((a) => a.techId === tid && a.date === day);
+  const refused = (D().timesheets || []).filter((f) => f.techId === tid && f.status === 'Refusée');
+  const myHabs = t ? currentHabs(t) : [];
+  const habAlert = myHabs.filter((hb) => habStatus(hb).level >= 1).length;
+  const hr = new Date().getHours();
+  const greet = hr < 12 ? 'Bonjour' : hr < 18 ? 'Bon après-midi' : 'Bonsoir';
+  const firstName = (t && t.firstName) || String(me.name || '').split(/\s+/).filter((w) => !/^(M\.|Mme)$/.test(w)).pop() || '';
+  v.innerHTML = `
+  <section class="hero">
+    <div class="hero-main">
+      <span class="eyebrow">${fmtD(day)}</span>
+      <h1>${esc(greet)}, ${esc(firstName)}</h1>
+      <p class="hero-sub">${todayAs.length ? todayAs.length + ' intervention' + (todayAs.length > 1 ? 's' : '') + " aujourd'hui · " : ''}${myTasks.length} tâche${myTasks.length > 1 ? 's' : ''} en cours${habAlert ? ' · ' + habAlert + ' habilitation' + (habAlert > 1 ? 's' : '') + ' à renouveler' : ''}</p>
+    </div>
+    <div class="hero-side">
+      <div class="hero-actions">
+        <a class="btn primary" href="#/scanner">${ICON.scan} Scanner</a>
+        <a class="btn" href="#/pointage">${ICON.clock} Pointer</a>
+      </div>
+      <div class="hero-stats"><div><b>${myTasks.length}</b><span>Tâches</span></div><div><b>${week.length}</b><span>Jours planifiés</span></div><div><b>${myHabs.length}</b><span>Habilitations</span></div></div>
+    </div>
+  </section>
+  ${refused.length ? `<div class="notice section">${ICON.alert}<span><b>${refused.length} feuille${refused.length > 1 ? 's' : ''} d'heures refusée${refused.length > 1 ? 's' : ''}</b> : <a href="#/pointage">corriger et renvoyer</a>.</span></div>` : ''}
+  ${!tid ? `<div class="notice section">${ICON.alert}<span>Votre compte n'est pas encore relié à une fiche technicien. Prévenez l'administrateur.</span></div>` : ''}
+  <div class="grid g4 section">
+    ${kpi(todayAs.length, "Interventions aujourd'hui", '', '#/planning', { icon: 'cal', sub: todayAs.map((a) => a.slot || 'Journée').join(' · ') || 'Aucune' })}
+    ${kpi(myTasks.length, 'Tâches en cours', '', '', { icon: 'list' })}
+    ${kpi(week.length, 'Prochains jours', '', '#/planning', { icon: 'clock', sub: '7 jours à venir' })}
+    ${kpi(habAlert, 'Habilitations à renouveler', habAlert ? 'warn' : 'ok', '', { icon: 'shield' })}
+  </div>
+  <div class="grid g2 section">
+    <div class="card"><h2>${ICON.list} Mes tâches en cours</h2>
+      ${myTasks.length ? `<div class="list" style="margin-top:.4rem">${myTasks.map((x) => `<a class="item" href="#/chantier/${x.chantierId}" style="text-decoration:none;color:inherit"><span style="flex:1;min-width:0"><b>${esc(x.title)}</b><br><span class="muted small">${esc(chantierById(x.chantierId)?.name || '')}</span></span>${statusPill(x.status)}</a>`).join('')}</div>` : `<div class="empty">${ICON.check}Aucune tâche en cours.</div>`}
+    </div>
+    <div class="card"><h2>${ICON.cal} Mon planning</h2>
+      ${week.length ? `<div class="list" style="margin-top:.4rem">${week.map((a) => `<a class="item" href="#/chantier/${a.chantierId}" style="text-decoration:none;color:inherit"><span style="flex:1;min-width:0"><b>${fmtD(a.date)}</b><br><span class="muted small">${esc(chantierById(a.chantierId)?.name || '–')}</span></span><span class="pill">${esc(a.slot || 'Journée')}</span></a>`).join('')}</div>` : `<div class="empty">${ICON.cal}Rien de prévu cette semaine.</div>`}
+    </div>
+    <div class="card"><h2>${ICON.shield} Mes habilitations</h2><div style="margin-top:.4rem">${t ? habTable(t) : '<p class="muted">–</p>'}</div></div>
+    <div class="card"><h2>${ICON.activity} Activité récente</h2>${recentFeed()}</div>
+  </div>`;
 }
 
 // ---------------- Chantiers ----------------
@@ -675,23 +945,27 @@ ROUTES.chantiers = async (v) => {
   if (filter === 'cours') filtered = filtered.filter(c => c.status === 'En cours');
   else if (filter === 'termine') filtered = filtered.filter(c => c.status === 'Clôturé');
   else if (filter === 'retard') filtered = filtered.filter(isLate);
-  v.innerHTML = `<div class="head"><h1>Gestion des chantiers</h1>${isAdmin() ? '<button class="btn primary" id="new-ch">+ Nouveau chantier</button>' : ''}</div>
-  <div class="grid g4" style="margin-bottom:1rem">
-    ${kpi(total, 'Total chantiers')}
-    ${kpi(enCours, 'En cours')}
-    ${kpi(termines, 'Terminés', 'ok')}
-    ${kpi(enRetard, 'En retard', enRetard ? 'red' : 'ok')}
+  v.innerHTML = `<div class="head"><div><h1>Chantiers</h1><span class="muted small">${total} chantier${total > 1 ? 's' : ''} · ${enCours} en cours · ${enRetard} en retard</span></div>${isAdmin() ? '<button class="btn primary" id="new-ch">+ Nouveau chantier</button>' : ''}</div>
+  <div class="grid g4 section">
+    ${kpi(total, 'Total chantiers', '', '', { icon: 'site' })}
+    ${kpi(enCours, 'En cours', '', '', { icon: 'activity' })}
+    ${kpi(termines, 'Terminés', 'ok', '', { icon: 'check' })}
+    ${kpi(enRetard, 'En retard', enRetard ? 'red' : 'ok', '', { icon: 'alert' })}
   </div>
-  <div class="card" style="margin-bottom:1rem">
-    <div class="row" style="gap:0.5rem;flex-wrap:wrap">
-      <input class="inp" id="chq" placeholder="Rechercher nom, client, adresse…" value="${esc(PL.chQ || '')}" style="flex:1;min-width:160px">
-      <button class="btn sm ${filter==='all'?'dark':''}" data-f="all">Tous</button>
-      <button class="btn sm ${filter==='cours'?'dark':''}" data-f="cours">En cours</button>
-      <button class="btn sm ${filter==='termine'?'dark':''}" data-f="termine">Terminés</button>
-      <button class="btn sm ${filter==='retard'?'dark':''}" data-f="retard">En retard</button>
+  <div class="card section" style="padding:.85rem 1rem">
+    <div class="row" style="gap:.7rem;flex-wrap:wrap">
+      <input class="inp" id="chq" placeholder="Rechercher un nom, un client, une adresse…" value="${esc(PL.chQ || '')}" style="flex:1;min-width:180px">
+      <div class="seg">${[['all', 'Tous'], ['cours', 'En cours'], ['termine', 'Terminés'], ['retard', 'En retard']].map(([k, l]) => `<button class="${filter === k ? 'on' : ''}" data-f="${k}">${l}</button>`).join('')}</div>
     </div>
   </div>
-  ${filtered.length ? `<div class="grid g3">${filtered.map((c) => { const p = progressOf(c.id); const late = isLate(c); return `<a class="card" href="#/chantier/${c.id}" style="text-decoration:none;color:inherit;display:block"><div class="row" style="justify-content:space-between"><b>${esc(c.name)}</b>${statusPill(c.status)}</div><p class="muted small" style="margin:.3rem 0">${esc(c.client || '')} · ${esc(c.address || '')}</p><div class="bar"><i style="width:${p.pct}%"></i></div><div class="row small" style="justify-content:space-between;margin-top:.3rem"><span><b>${String(p.pct).replace('.', ',')} %</b> d'avancement</span>${late ? '<span class="pill red">En retard</span>' : ''}${demoTag(c)}</div></a>`; }).join('')}</div>` : '<div class="card"><p class="muted">Aucun chantier correspondant.</p></div>'}`;
+  ${filtered.length ? `<div class="grid g3">${filtered.map((c) => { const p = progressOf(c.id); const late = isLate(c); const team = (c.team || []).length; const eq = D().equipment.filter((e) => e.chantierId === c.id).length; return `<a class="card ch-card" href="#/chantier/${c.id}">
+    <div class="row" style="justify-content:space-between;align-items:flex-start;gap:.6rem"><b style="font-size:1rem;letter-spacing:-.01em">${esc(c.name)}</b>${statusPill(c.status)}</div>
+    <p class="muted small" style="margin:.35rem 0 .9rem;min-height:1.1rem">${esc(c.client || 'Sans client')}${c.address ? ' · ' + esc(c.address) : ''}</p>
+    <div class="row" style="justify-content:space-between;font-size:.78rem;margin-bottom:.45rem"><span class="muted">Avancement</span><b>${String(p.pct).replace('.', ',')} %</b></div>
+    <div class="bar ${late ? 'late' : ''}"><i style="width:${p.pct}%"></i></div>
+    <div class="row" style="justify-content:space-between;margin-top:.85rem;font-size:.75rem;color:var(--text-3)">
+      <span>${ICON.clock} ${h(p.real)} / ${h(p.total)}</span><span>${ICON.users} ${team}</span><span>${ICON.box} ${eq}</span>${late ? '<span class="pill red">Retard</span>' : ''}${demoTag(c)}
+    </div></a>`; }).join('')}</div>` : `<div class="card"><div class="empty">${ICON.site}Aucun chantier ne correspond à cette recherche.</div></div>`}`;
   const b = $('#new-ch'); if (b) b.onclick = () => chantierForm();
   $('#chq', v).oninput = (e) => { PL.chQ = e.target.value; clearTimeout(PL.chT); PL.chT = setTimeout(() => render(), 250); };
   $$('[data-f]', v).forEach(btn => btn.onclick = () => { PL.chFilter = btn.dataset.f; render(); });
@@ -734,15 +1008,15 @@ ROUTES.chantier = async (v, id) => {
   v.innerHTML = `
   <div class="head"><div><a href="#/chantiers" class="small">← Chantiers</a><h1>${esc(c.name)}${demoTag(c)}</h1></div>
     <div class="row">${statusPill(c.status)}
-      ${isAdmin() ? '<button class="btn sm" id="edit-ch">Modifier</button><button class="btn sm" style="background:#DC2626;color:#fff" id="del-ch">Supprimer</button>' : ''}
+      ${isAdmin() ? '<button class="btn sm" id="edit-ch">Modifier</button><button class="btn sm danger" id="del-ch">Supprimer</button>' : ''}
       ${isChef() && c.status === 'En cours' ? '<button class="btn sm" id="propose">Proposer la clôture</button>' : ''}
       ${isAdmin() && c.status === 'Clôture proposée' ? '<button class="btn sm primary" id="close-ch">Valider la clôture</button>' : ''}
       ${!isTech() ? '<button class="btn sm dark" id="pdf">Rapport PDF</button>' : ''}</div></div>
-  <div class="grid g4" style="margin-bottom:1rem">
-    ${kpi(String(p.pct).replace('.', ',') + ' %', 'Avancement')}
-    ${kpi(h(p.total), 'Heures prévues')}
-    ${kpi(h(p.real), 'Heures réalisées')}
-    ${kpi((p.gap > 0 ? '+' : '') + h(p.gap), 'Écart (tâches terminées)', p.gap > 0 ? 'red' : 'ok')}
+  <div class="grid g4 section">
+    ${kpi(String(p.pct).replace('.', ',') + ' %', 'Avancement', '', '', { icon: 'activity', sub: `${tasks.filter((t) => t.status === 'Terminée').length}/${tasks.length} tâches terminées` })}
+    ${kpi(h(p.total), 'Heures prévues', '', '', { icon: 'clock' })}
+    ${kpi(h(p.real), 'Heures réalisées', '', '', { icon: 'check' })}
+    ${kpi((p.gap > 0 ? '+' : '') + h(p.gap), 'Écart (tâches terminées)', p.gap > 0 ? 'red' : 'ok', '', { icon: 'alert' })}
   </div>
   <div class="grid g2">
     <div class="card"><h2>Informations</h2>
@@ -750,7 +1024,7 @@ ROUTES.chantier = async (v, id) => {
       <tr><th>Responsable</th><td>${esc(userName(c.chefId))}</td></tr><tr><th>Dates prévues</th><td>${fmtD(c.start)} → ${fmtD(c.endPlanned)}</td></tr>
       <tr><th>Équipe</th><td>${(c.team || []).map((t) => esc(techName(t))).join(', ') || '–'} ${canTask ? '<button class="btn sm" id="team">Modifier l\'équipe</button>' : ''}</td></tr></table>
       ${c.description ? `<p>${esc(c.description)}</p>` : ''}</div>
-    <div class="card"><h2>Avancement</h2><div class="bar" style="height:16px"><i style="width:${p.pct}%"></i></div>
+    <div class="card"><h2>${ICON.activity} Avancement</h2><div class="row" style="justify-content:space-between;align-items:baseline;margin:.2rem 0 .45rem"><b style="font-family:var(--display);font-size:1.5rem">${String(p.pct).replace('.', ',')} %</b><span class="muted small">${isLate(c) ? '<span class="pill red">En retard</span>' : '<span class="pill green">Dans les temps</span>'}</span></div><div class="bar" style="height:12px"><i style="width:${p.pct}%"></i></div>
       <p class="small muted">Avancement = heures prévues des tâches terminées (${h(p.done)}) ÷ heures prévues de toutes les tâches (${h(p.total)}).</p>${estHTML}</div>
   </div>
   <div class="card"><div class="head"><h2>Tâches</h2>${canTask ? '<button class="btn primary sm" id="new-task">+ Tâche</button>' : ''}</div>
@@ -826,21 +1100,21 @@ ROUTES.planning = async (v) => {
   const late = d.assignments.filter(a => a.date < today && a.status !== 'Terminé');
   const techs = d.technicians.filter(t => t.active !== false);
   const available = techs.filter(t => !absentOn(t.id, today)).length;
-  v.innerHTML = `<div class="head"><h1>Planning</h1><button class="btn primary" id="new-inter">+ Ajouter une intervention</button></div>
-  <div class="grid g4" style="margin-bottom:1rem">
-    ${kpi(todayAssigns.length, "Aujourd'hui")}
-    ${kpi(weekAssigns.length, 'Cette semaine')}
-    ${kpi(available + '/' + techs.length, 'Disponibles')}
-    ${kpi(late.length, 'En retard', late.length ? 'red' : 'ok')}
+  v.innerHTML = `<div class="head"><div><h1>Planning</h1><span class="muted small">Affectations des équipes, du jour au mois</span></div>${!isTech() ? '<button class="btn primary" id="new-inter">+ Ajouter une intervention</button>' : ''}</div>
+  <div class="grid g4 section">
+    ${kpi(todayAssigns.length, "Interventions aujourd'hui", '', '', { icon: 'cal', sub: `${todayAssigns.filter(a => a.status === 'Terminé').length} terminées` })}
+    ${kpi(weekAssigns.length, 'Cette semaine', '', '', { icon: 'activity', sub: `${d.assignments.length} au total` })}
+    ${kpi(`${available}<small>/${techs.length}</small>`, 'Techniciens disponibles', available < techs.length ? 'warn' : 'ok', '#/absences', { icon: 'users', sub: `${techs.length - available} indisponible${techs.length - available > 1 ? 's' : ''}` })}
+    ${kpi(late.length, 'Interventions en retard', late.length ? 'red' : 'ok', '', { icon: 'clock', sub: 'Avant aujourd\'hui' })}
   </div>
-  <div class="card">
-    <div class="row" style="justify-content:space-between;margin-bottom:0.75rem">
+  <div class="card section">
+    <div class="row" style="justify-content:space-between;margin-bottom:.85rem;flex-wrap:wrap;gap:.5rem">
       <div class="row">${['day','week','month'].map(m => `<button class="btn sm ${PL.mode===m?'dark':''}" data-mode="${m}">${{day:'Jour',week:'Semaine',month:'Mois'}[m]}</button>`).join('')}</div>
-      <div class="row"><button class="btn sm" data-nav="-1">‹</button><b id="pl-title"></b><button class="btn sm" data-nav="1">›</button><button class="btn sm" data-today>Aujourd'hui</button></div>
+      <div class="row"><button class="btn sm" data-nav="-1" aria-label="Période précédente">‹</button><b id="pl-title" style="min-width:190px;text-align:center;font-family:var(--display)"></b><button class="btn sm" data-nav="1" aria-label="Période suivante">›</button><button class="btn sm" data-today>Aujourd'hui</button></div>
     </div>
     <div id="pl-cal"></div>
   </div>
-  <div class="card"><h3>Statistiques</h3><div id="pl-stats" class="muted small">Chargement…</div></div>`;
+  <div class="card"><h2>${ICON.activity} Charge des techniciens</h2><p class="muted small" style="margin:-.3rem 0 .9rem">Interventions planifiées cette semaine.</p><div id="pl-stats" class="muted small">Chargement…</div></div>`;
   const renderCal = () => {
     let days;
     if (PL.mode === 'day') days = [PL.anchor];
@@ -849,24 +1123,30 @@ ROUTES.planning = async (v) => {
     const title = PL.mode === 'day' ? parseD(PL.anchor).toLocaleDateString('fr-FR', {weekday:'long', day:'numeric', month:'long'}) : PL.mode === 'week' ? `Semaine du ${fmtD(days[0])} au ${fmtD(days[6])}` : parseD(PL.anchor).toLocaleDateString('fr-FR', {month:'long', year:'numeric'});
     document.getElementById('pl-title').textContent = title;
     const assigns = d.assignments.filter(a => days.includes(a.date));
-    let html = '<div style="display:grid;gap:0.5rem">';
+    let html = '<div class="pl-week">';
     days.forEach(day => {
       const dayAs = assigns.filter(a => a.date === day);
       const we = !isWorkDay(day);
-      html += `<div style="border:1px solid #E5E7EB;border-radius:10px;padding:0.6rem;background:${we?'#F9FAFB':'#fff'}"><b>${parseD(day).toLocaleDateString('fr-FR', {weekday:'short', day:'2-digit', month:'2-digit'})}</b>`;
-      if (!dayAs.length) html += '<p class="muted small" style="margin:0.3rem 0">Aucune intervention</p>';
+      const dt = parseD(day);
+      html += `<div class="pl-day ${we ? 'we' : ''} ${day === today ? 'today' : ''}">
+        <div class="pl-day-head"><b>${esc(dt.toLocaleDateString('fr-FR', { weekday: 'long' }))}</b><span class="muted">${dt.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' })}</span>
+        ${dayAs.length ? `<span class="pill" style="margin-left:auto">${dayAs.length}</span>` : ''}</div>`;
+      if (!dayAs.length) html += '<p class="muted small" style="margin:.35rem 0 0">Aucune intervention</p>';
       else dayAs.forEach(a => {
         const tech = techs.find(t => t.id === a.techId);
         const ch = chantierById(a.chantierId);
-        const color = a.status === 'Terminé' ? '#16A34A' : a.status === 'En attente' ? '#F59E0B' : '#2563EB';
-        html += `<div style="margin:0.3rem 0;padding:0.4rem 0.6rem;border-left:3px solid ${color};background:#F8FAFC;border-radius:6px;font-size:0.85rem">${esc(ch?.name || 'Intervention')} · ${esc(tech ? tech.firstName + ' ' + tech.lastName : '')} · ${esc(a.slot || '')}</div>`;
+        const color = a.status === 'Terminé' ? '#0E9F6E' : a.status === 'En attente' ? '#F59E0B' : '#2563EB';
+        html += `<div class="pl-ev" style="--c:${color}"><b>${esc(ch?.name || a.name || 'Intervention')}</b><span class="muted">${esc(tech ? tech.firstName + ' ' + tech.lastName : '')}</span><span class="pill" style="margin-left:auto">${esc(a.slot || 'Journée')}</span></div>`;
       });
       html += '</div>';
     });
     html += '</div>';
     document.getElementById('pl-cal').innerHTML = html;
-    const stats = `Interventions cette semaine : ${weekAssigns.length}. Terminées : ${weekAssigns.filter(a => a.status === 'Terminé').length}.`;
-    document.getElementById('pl-stats').textContent = stats;
+    const load = {};
+    weekAssigns.forEach(a => { load[a.techId] = (load[a.techId] || 0) + 1; });
+    const items = techs.map(t => ({ l: t.firstName + ' ' + (t.lastName || ''), v: load[t.id] || 0 })).sort((a, b) => b.v - a.v).slice(0, 8);
+    const max = Math.max(1, ...items.map(i => i.v));
+    document.getElementById('pl-stats').innerHTML = `<p style="margin:0 0 .8rem">${weekAssigns.length} interventions cette semaine · ${weekAssigns.filter(a => a.status === 'Terminé').length} terminées</p>` + hbars(items, { unit: 'interv.', max });
   };
   renderCal();
   $$('[data-mode]', v).forEach(b => b.onclick = () => { PL.mode = b.dataset.mode; render(); });
@@ -1471,8 +1751,8 @@ ROUTES.pointage = async (v) => {
     const mine = all.filter((f) => f.techId === S.me.technicianId);
     const wk = mine.filter((f) => f.date >= weekStart);
     const sumOf = (l) => h(l.reduce((s, f) => s + (f.total || 0), 0));
-    v.innerHTML = `<div class="head"><h1>Mes heures</h1><button class="btn primary" id="ts-new">+ Feuille du jour</button></div>
-      <div class="grid g2" style="margin-bottom:1rem">${kpi(sumOf(wk.filter((f) => f.status === 'Validée')), 'Validées cette semaine', 'ok')}${kpi(sumOf(wk.filter((f) => f.status === 'Envoyée')), 'En attente du chef')}</div>
+    v.innerHTML = `<div class="head"><div><h1>Mes heures</h1><span class="muted small">Saisie et suivi de vos feuilles</span></div><button class="btn primary" id="ts-new">+ Feuille du jour</button></div>
+      <div class="grid g2 section">${kpi(sumOf(wk.filter((f) => f.status === 'Validée')), 'Validées cette semaine', 'ok', '', { icon: 'check', sub: `${wk.filter((f) => f.status === 'Validée').length} feuille(s)` })}${kpi(sumOf(wk.filter((f) => f.status === 'Envoyée')), 'En attente du chef', '', '', { icon: 'clock', sub: `${wk.filter((f) => f.status === 'Envoyée').length} à valider` })}</div>
       ${pendingQ.length ? `<div class="notice" style="margin-bottom:1rem">${pendingQ.length} feuille${pendingQ.length > 1 ? 's' : ''} enregistrée${pendingQ.length > 1 ? 's' : ''} sur l'appareil, en attente d'envoi : ${pendingQ.map((q) => esc(q.label)).join(', ')}</div>` : ''}
       ${!S.me.technicianId ? '<div class="notice">Votre compte n\'est pas relié à une fiche technicien : prévenez l\'administrateur.</div>' : ''}
       ${mine.map((f) => sheetCard(f)).join('') || '<div class="card"><p class="muted">Aucune feuille pour l\'instant. Touchez « + Feuille du jour » à la fin de votre journée.</p></div>'}`;
@@ -1480,8 +1760,8 @@ ROUTES.pointage = async (v) => {
     const tab = PL.tsTab || 'todo';
     const lists = { todo: all.filter((f) => f.status === 'Envoyée'), ok: all.filter((f) => f.status === 'Validée'), no: all.filter((f) => f.status === 'Refusée'), all };
     const decidable = lists.todo.filter(canDecideLocal);
-    v.innerHTML = `<div class="head"><h1>Pointage des heures</h1>${isAdmin() ? '<button class="btn primary" id="ts-new">+ Saisir pour un technicien</button>' : (S.me.technicianId ? '<button class="btn primary" id="ts-new">+ Ma feuille</button>' : '')}</div>
-      <div class="row" style="margin-bottom:.8rem">${[['todo', 'À valider'], ['ok', 'Validées'], ['no', 'Refusées'], ['all', 'Toutes']].map(([k, l]) => `<button class="btn sm ${tab === k ? 'dark' : ''}" data-tab="${k}">${l} (${lists[k].length})</button>`).join('')}</div>
+    v.innerHTML = `<div class="head"><div><h1>Pointage des heures</h1><span class="muted small">Validation des feuilles de la semaine</span></div>${isAdmin() ? '<button class="btn primary" id="ts-new">+ Saisir pour un technicien</button>' : (S.me.technicianId ? '<button class="btn primary" id="ts-new">+ Ma feuille</button>' : '')}</div>
+      <div class="seg" style="margin-bottom:.9rem">${[['todo', 'À valider'], ['ok', 'Validées'], ['no', 'Refusées'], ['all', 'Toutes']].map(([k, l]) => `<button class="${tab === k ? 'on' : ''}" data-tab="${k}">${l}<span>${lists[k].length}</span></button>`).join('')}</div>
       ${tab === 'todo' && decidable.length > 1 ? `<button class="btn primary" id="ts-all" style="margin-bottom:.8rem">Valider les ${decidable.length} feuilles affichées</button>` : ''}
       ${isChef() ? '<p class="muted small">Vous validez les feuilles dont toutes les heures sont sur vos chantiers. Les autres sont validées par l\'administrateur.</p>' : ''}
       ${lists[tab].map((f) => sheetCard(f, { decide: true })).join('') || '<div class="card"><p class="muted">Aucune feuille ici.</p></div>'}`;
@@ -1531,9 +1811,25 @@ ROUTES.profil = async (v) => {
   $('#out', v).onclick = () => logout();
 };
 ROUTES.plus = async (v) => {
-  v.innerHTML = `<div class="head"><h1>Plus</h1><span class="muted small">${esc(S.me.name)} · ${esc(ROLE_LABEL[S.me.role])}</span></div><div class="tiles">${navItems().filter(([href]) => !['#/', '#/chantiers', '#/planning', '#/scanner'].includes(href)).map(([href, ic, lab]) => `<a href="${href}">${ICON[ic]}${esc(lab)}</a>`).join('')}</div>`;
+  const DESCR = { '#/pointage': 'Saisir et valider les heures', '#/materiel': 'Équipements et interventions', '#/techniciens': 'Fiches, habilitations, rôles', '#/absences': 'Congés, arrêts, disponibilité', '#/rapports': 'Synthèses et exports', '#/alertes': 'Habilitations et retards', '#/journal': "Historique des actions", '#/reglages': 'Entreprise, données, sauvegardes', '#/scanner': 'Identifier un équipement', '#/planning': 'Affectations de la semaine', '#/chantiers': 'Tous les chantiers' };
+  const items = navItems().filter(([href]) => !['#/', '#/chantiers', '#/planning', '#/scanner'].includes(href));
+  v.innerHTML = `<div class="head"><h1>Plus</h1><span class="muted small">${esc(S.me.name)} · ${esc(ROLE_LABEL[S.me.role])}</span></div>
+  <div class="grid g2">
+    <div class="card"><h2>${ICON.menu} Toutes les sections</h2>
+      <div class="tiles" style="margin-top:.8rem">${items.map(([href, ic, lab]) => `<a href="${href}">${ICON[ic]}<span>${esc(lab)}</span>${DESCR[href] ? `<span class="muted small" style="font-weight:500">${esc(DESCR[href])}</span>` : ''}</a>`).join('')}</div>
+    </div>
+    <div class="card"><h2>${ICON.user} Mon compte</h2>
+      <div class="list" style="margin-top:.5rem">
+        <a class="item" href="#/profil" style="text-decoration:none;color:inherit"><span><b>${esc(S.me.name)}</b><br><span class="muted small">${esc(ROLE_LABEL[S.me.role])}</span></span><span class="pill">Profil</span></a>
+        <div class="item"><span><b>Version</b><br><span class="muted small">Application de gestion MIMOUNI</span></span></div>
+        <div class="item"><span><b>Connexion</b><br><span class="muted small" data-net-label>En ligne</span></span><span class="dot" data-net-dot></span></div>
+      </div>
+      <button class="btn bigbtn" id="plus-logout" style="margin-top:1rem">${ICON.logout} Se déconnecter</button>
+    </div>
+  </div>`;
+  const b = $('#plus-logout'); if (b) b.onclick = () => logout();
+  paintStatus();
 };
-
 
 function initAI() {
   if (document.getElementById('ai-btn')) return;
@@ -1555,9 +1851,9 @@ function openAI() {
   if (document.querySelector('.ai-panel')) return;
   const panel = document.createElement('div');
   panel.className = 'ai-panel';
-  panel.style.cssText = 'position:fixed;bottom:5.5rem;right:1rem;width:min(360px,calc(100vw - 1.5rem));height:min(520px,75vh);background:#FFFFFF;border-radius:16px;box-shadow:0 8px 30px rgba(0,0,0,0.12);z-index:91;display:flex;flex-direction:column;overflow:hidden;border:1px solid #E5E7EB;';
+  panel.style.cssText = 'position:fixed;bottom:5.2rem;right:1rem;width:min(370px,calc(100vw - 1.5rem));height:min(540px,76vh);background:#FFFFFF;border-radius:18px;box-shadow:0 24px 60px -20px rgba(8,24,49,.45);z-index:91;display:flex;flex-direction:column;overflow:hidden;border:1px solid #E4EAF3;';
   panel.innerHTML = `
-    <div style="background:#17365D;color:#fff;padding:0.65rem 1rem;display:flex;justify-content:space-between;align-items:center"><span style="font-weight:600;font-size:0.95rem">Assistant MIMOUNI</span><button id="ai-close" style="background:none;border:none;color:#CBD5E1;font-size:1.3rem;cursor:pointer;line-height:1">×</button></div>
+    <div style="background:linear-gradient(135deg,#0B2440,#1D4ED8);color:#fff;padding:0.8rem 1rem;display:flex;justify-content:space-between;align-items:center"><span style="font-weight:600;font-size:0.95rem;letter-spacing:-.01em">Assistant MIMOUNI</span><button id="ai-close" style="background:none;border:none;color:#CBD5E1;font-size:1.3rem;cursor:pointer;line-height:1">×</button></div>
     <div id="ai-msgs" style="flex:1;overflow-y:auto;padding:0.75rem;background:#F9FAFB"></div>
     <div style="padding:0.5rem;border-top:1px solid #E5E7EB;display:flex;gap:0.35rem;align-items:center;background:#fff">
       <button id="ai-mic" title="Parler" style="background:#F3F4F6;border:none;border-radius:8px;width:34px;height:34px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#374151" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v4M8 23h8"/></svg></button>

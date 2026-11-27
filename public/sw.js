@@ -1,9 +1,9 @@
 // Service worker MIMOUNI INDUSTRIEL ÉLECTRICITÉ : application disponible hors ligne.
-const VERSION = 'mimouni-v1.1.3';
-const SHELL = ['/', '/index.html', '/app.css?v=12', '/app.js?v=12', '/manifest.webmanifest', '/vendor/qrcode.js', '/vendor/jsQR.js', '/vendor/jspdf.umd.min.js', '/vendor/jszip.min.js', '/icons/icon-192.png', '/icons/icon-512.png', '/icons/icon-180.png'];
+const VERSION = 'mimouni-v1.2.0';
+const SHELL = ['/', '/index.html', '/app.css?v=31', '/app.js?v=51', '/manifest.webmanifest', '/vendor/qrcode.js', '/vendor/jsQR.js', '/vendor/jspdf.umd.min.js', '/vendor/jszip.min.js', '/icons/icon-192.png', '/icons/icon-512.png', '/icons/icon-180.png'];
 
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(VERSION).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
+  e.waitUntil(caches.open(VERSION).then((c) => c.addAll(SHELL)).catch(() => {}).then(() => self.skipWaiting()));
 });
 self.addEventListener('activate', (e) => {
   e.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== VERSION).map((k) => caches.delete(k)))).then(() => self.clients.claim()));
@@ -17,8 +17,9 @@ self.addEventListener('fetch', (e) => {
       .catch(() => caches.match('/index.html')));
     return;
   }
-  e.respondWith(caches.match(e.request).then((hit) => hit || fetch(e.request).then((r) => {
+  // Réseau d'abord : une nouvelle version du site est prise en compte dès qu'on est en ligne.
+  e.respondWith(fetch(e.request).then((r) => {
     if (r.ok) { const copy = r.clone(); caches.open(VERSION).then((c) => c.put(e.request, copy)); }
     return r;
-  })));
+  }).catch(() => caches.match(e.request).then((hit) => hit || caches.match('/index.html'))));
 });
