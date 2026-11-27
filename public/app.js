@@ -792,7 +792,7 @@ ROUTES.planning = async (v) => {
     <div class="row"><button class="btn sm" data-nav-d="-1">‹</button><b>${esc(title)}</b><button class="btn sm" data-nav-d="1">›</button><button class="btn sm" data-today>Aujourd'hui</button></div></div>
     ${conflicts.length ? `<p class="err small" id="conflict-list">⚠ ${conflicts.length} conflit(s) : ${conflicts.map((x) => esc(techName(x.a.techId) + ' le ' + fmtD(x.a.date) + ' – ' + x.c.join(', '))).join(' · ')}</p>` : '<p class="muted small">Aucun conflit sur la période.</p>'}
     <div class="table-wrap"><table class="plan ${PL.mode === 'month' ? 'month' : ''}"><thead><tr><th class="tech">Technicien</th>${days.map((d) => `<th data-d="${d}" class="${!isWorkDay(d) ? 'we' : ''}">${PL.mode === 'month' ? parseD(d).getDate() : parseD(d).toLocaleDateString('fr-FR', { weekday: 'short', day: '2-digit', month: '2-digit' })}</th>`).join('')}</tr></thead>
-    <tbody>${techs.map((t) => `<tr><td class="tech"><a href="#/technicien/${t.id}" style="color:inherit;font-weight:600;text-decoration:none">${esc(t.firstName + ' ' + t.lastName)}</a>${demoTag(t)}${canEdit ? ` <button class="btn sm" style="margin-top:4px;padding:2px 8px;font-size:0.7rem" data-assign="${t.id}">+ Affecter</button>` : ''}</td>${days.map((d) => cell(t, d)).join('')}</tr>`).join('') || `<tr><td class="muted" colspan="${days.length + 1}">Aucun technicien.</td></tr>`}</tbody></table></div>
+    <tbody>${techs.map((t) => `<tr><td class="tech" style="cursor:pointer" data-tech="${t.id}"><b>${esc(t.firstName + ' ' + t.lastName)}</b>${demoTag(t)}${canEdit ? ` <button class="btn sm" style="margin-top:4px;padding:2px 8px;font-size:0.7rem" data-assign="${t.id}">+ Affecter</button>` : ''}</td>${days.map((d) => cell(t, d)).join('')}</tr>`).join('') || `<tr><td class="muted" colspan="${days.length + 1}">Aucun technicien.</td></tr>`}</tbody></table></div>
     <p class="muted small">Rouge = conflit (double affectation, absence ou habilitation expirée). ${canEdit ? 'Touchez une affectation pour la retirer.' : ''}</p></div>`;
   // Sur téléphone, la semaine ne tient pas en largeur : on fait défiler jusqu'au jour d'aujourd'hui
   { const wrap = $('.table-wrap', v); const target = days.includes(todayISO()) ? todayISO() : PL.anchor; const th = wrap && wrap.querySelector(`th[data-d="${target}"]`);
@@ -804,6 +804,7 @@ ROUTES.planning = async (v) => {
     $('#new-as', v).onclick = () => assignForm();
     $$('[data-assign]', v).forEach((b) => (b.onclick = (e) => { e.preventDefault(); e.stopPropagation(); assignForm(b.dataset.assign); }));
   }
+  $$('[data-tech]', v).forEach((td) => (td.onclick = (e) => { if (e.target.closest('[data-assign]')) return; location.hash = '#/technicien/' + td.dataset.tech; }));
     $$('[data-as]', v).forEach((el) => (el.onclick = async () => { const a = D().assignments.find((x) => x.id === el.dataset.as); if (!a || a.other) return; if (await confirmBox(`Retirer l'affectation de ${esc(techName(a.techId))} le ${fmtD(a.date)} ?`, 'Retirer')) { await api('DELETE', 'assignments/' + a.id); toast('Affectation retirée'); refresh(); } }));
   }
 };
