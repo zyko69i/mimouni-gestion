@@ -108,8 +108,10 @@ async function queueAdd(item) {
   if (item.body && !item.body.clientId) item.body.clientId = item.qid;
   if (item.body) item.body.offline = true;
   await idb.qAdd(item); S.queue = await idb.qAll(); paintStatus();
+  initAI();
 }
-async function queueRefresh() { S.queue = await idb.qAll(); paintStatus(); }
+async function queueRefresh() { S.queue = await idb.qAll(); paintStatus();
+  initAI(); }
 
 function queueSummary(q) {
   const inter = q.filter((x) => x.kind === 'intervention').length;
@@ -158,11 +160,13 @@ async function sendQueue() {
   }
   await queueRefresh();
   if (sent) toast(`✔ Envoyé et sauvegardé le ${new Date().toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' })} à ${new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`);
-  if (failed && !sent) { S.apiError = true; paintStatus(); }
+  if (failed && !sent) { S.apiError = true; paintStatus();
+  initAI(); }
   await refresh().catch(() => {});
 }
 
-function setOnline(v) { if (S.online !== v) { S.online = v; paintStatus(); } }
+function setOnline(v) { if (S.online !== v) { S.online = v; paintStatus();
+  initAI(); } }
 window.addEventListener('online', () => { setOnline(true); proposeSync(); });
 window.addEventListener('offline', () => { setOnline(false); });
 
@@ -480,6 +484,7 @@ function renderShell() {
   });
   side.querySelectorAll('a').forEach(a => a.onclick = () => { if (window.innerWidth < 900) side.classList.remove('open'); });
   paintStatus();
+  initAI();
 }
 function paintStatus() {
   const dot = $('#net-dot'); if (!dot) return;
@@ -1445,8 +1450,10 @@ ROUTES.pointage = async (v) => {
 };
 
 // ---------------- envois refusés au retour du réseau : jamais perdus ----------------
-async function rejectedLoad() { S.rejected = (await idb.get('rejected').catch(() => null)) || []; paintStatus(); }
-async function rejectedSave() { await idb.set('rejected', S.rejected); paintStatus(); }
+async function rejectedLoad() { S.rejected = (await idb.get('rejected').catch(() => null)) || []; paintStatus();
+  initAI(); }
+async function rejectedSave() { await idb.set('rejected', S.rejected); paintStatus();
+  initAI(); }
 async function rejectedRemove(qid) { S.rejected = S.rejected.filter((x) => x.qid !== qid); await rejectedSave(); }
 ROUTES.envois = async (v) => {
   const list = S.rejected || [];
@@ -1480,3 +1487,54 @@ ROUTES.profil = async (v) => {
 ROUTES.plus = async (v) => {
   v.innerHTML = `<div class="head"><h1>Plus</h1><span class="muted small">${esc(S.me.name)} · ${esc(ROLE_LABEL[S.me.role])}</span></div><div class="tiles">${navItems().filter(([href]) => !['#/', '#/chantiers', '#/planning', '#/scanner'].includes(href)).map(([href, ic, lab]) => `<a href="${href}">${ICON[ic]}${esc(lab)}</a>`).join('')}</div>`;
 };
+
+function initAI() {
+  if (document.getElementById('ai-btn')) return;
+  const btn = document.createElement('button');
+  btn.id = 'ai-btn';
+  btn.innerHTML = '🤖';
+  btn.title = 'Assistant Grok';
+  btn.style.cssText = 'position:fixed;bottom:1.5rem;right:1.5rem;width:56px;height:56px;border-radius:50%;background:#2563EB;color:#fff;border:none;font-size:1.6rem;box-shadow:0 4px 16px rgba(37,99,235,0.35);z-index:90;cursor:pointer;';
+  document.body.appendChild(btn);
+  btn.onclick = openAI;
+}
+function openAI() {
+  if (document.querySelector('.ai-panel')) return;
+  const panel = document.createElement('div');
+  panel.className = 'ai-panel';
+  panel.style.cssText = 'position:fixed;bottom:5rem;right:1rem;width:min(380px,calc(100vw - 2rem));height:420px;background:#fff;border-radius:16px;box-shadow:0 12px 40px rgba(0,0,0,0.18);z-index:91;display:flex;flex-direction:column;overflow:hidden;';
+  panel.innerHTML = `
+    <div style="background:#17365D;color:#fff;padding:0.8rem 1rem;display:flex;justify-content:space-between;align-items:center"><b>Assistant Grok</b><button id="ai-close" style="background:none;border:none;color:#fff;font-size:1.3rem;cursor:pointer">×</button></div>
+    <div id="ai-msgs" style="flex:1;overflow-y:auto;padding:1rem;font-size:0.9rem"></div>
+    <div style="padding:0.75rem;border-top:1px solid #e2e8f0;display:flex;gap:0.5rem"><input id="ai-input" placeholder="Posez une question sur vos données…" style="flex:1;padding:0.6rem;border:1px solid #cbd5e1;border-radius:10px"><button id="ai-send" class="btn primary" style="padding:0.6rem 1rem">Envoyer</button></div>`;
+  document.body.appendChild(panel);
+  document.getElementById('ai-close').onclick = () => panel.remove();
+  const send = () => {
+    const input = document.getElementById('ai-input');
+    const q = input.value.trim(); if (!q) return;
+    input.value = '';
+    addMsg(q, true);
+    setTimeout(() => addMsg(aiReply(q), false), 400);
+  };
+  document.getElementById('ai-send').onclick = send;
+  document.getElementById('ai-input').onkeydown = (e) => { if (e.key === 'Enter') send(); };
+  addMsg('Bonjour ! Je suis Grok, votre assistant dans MIMOUNI. Posez-moi des questions sur les techniciens, chantiers, absences ou le planning.', false);
+}
+function addMsg(text, me) {
+  const box = document.getElementById('ai-msgs');
+  if (!box) return;
+  const div = document.createElement('div');
+  div.style.cssText = `margin:0.4rem 0;padding:0.6rem 0.8rem;border-radius:12px;max-width:85%;${me ? 'background:#2563EB;color:#fff;margin-left:auto' : 'background:#F1F5F9;color:#1E293B'}`;
+  div.textContent = text;
+  box.appendChild(div);
+  box.scrollTop = box.scrollHeight;
+}
+function aiReply(q) {
+  const d = D();
+  const low = q.toLowerCase();
+  if (low.includes('technicien') || low.includes('employé') || low.includes('ouvrier')) return `Vous avez ${d.technicians.length} techniciens enregistrés.`;
+  if (low.includes('chantier')) return `Il y a ${d.chantiers.length} chantier(s). ${d.chantiers.filter(c => c.status === 'En cours').length} en cours.`;
+  if (low.includes('absence')) return `Il y a ${d.absences.length} absence(s) enregistrée(s).`;
+  if (low.includes('retard') || low.includes('alerte')) return `Chantiers en retard : ${d.chantiers.filter(isLate).length}. Habilitations à renouveler : ${habAlerts().length}.`;
+  return 'Je peux vous aider sur les techniciens, les chantiers, les absences et les alertes. Posez une question plus précise !';
+}
