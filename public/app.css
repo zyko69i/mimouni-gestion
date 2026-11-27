@@ -591,3 +591,65 @@ tr:last-child td { border-bottom: none; }
 
 /* Charts if any */
 .chart { height: 200px; background: var(--white); border-radius: var(--r); border: 1px solid var(--border); }
+
+/* ===== Mobile optimizations ===== */
+@media (max-width: 899px) {
+  main {
+    padding: 1rem 0.75rem !important;
+    padding-top: 4.5rem !important;
+    padding-bottom: 7rem !important;
+  }
+  .head {
+    margin-left: 0;
+    padding-left: 0.5rem;
+  }
+  .head h1, .head .muted {
+    margin-left: 0 !important;
+  }
+  .btn {
+    min-height: 44px;
+    padding: 0.7rem 1rem;
+  }
+  .btn.sm {
+    min-height: 40px;
+    padding: 0.4rem 0.75rem;
+  }
+  .card {
+    padding: 1rem;
+    margin-bottom: 1rem;
+  }
+  .kpi {
+    padding: 0.9rem 1rem;
+  }
+  .kpi .v { font-size: 1.6rem; }
+  .table-wrap {
+    margin: 0 -0.25rem;
+    border-radius: 12px;
+  }
+  table.plan td, table.plan th {
+    padding: 0.5rem 0.4rem;
+    font-size: 0.8rem;
+  }
+  .modal {
+    padding: 1.2rem 1rem 2rem;
+  }
+  .modal .actions {
+    position: sticky;
+    bottom: 0;
+    background: var(--white);
+    padding: 0.75rem 0 0.5rem;
+    margin-top: 1rem;
+    border-top: 1px solid var(--border);
+    z-index: 2;
+  }
+  input, select, textarea {
+    font-size: 16px !important; /* prevent iOS zoom */
+  }
+}
+
+/* Better touch targets */
+@media (hover: none) and (pointer: coarse) {
+  .btn, .side a, .kpi {
+    min-height: 44px;
+  }
+}
