@@ -165,7 +165,8 @@ function techFields(b, prev = {}) {
 }
 
 function habFields(b) {
-  const kind = HAB_KINDS.includes(b.kind) ? b.kind : 'Autre';
+  // Le type est libre : un nouveau référentiel peut être saisi sans redéploiement.
+  const kind = str(b.kind, 60) || 'Autre';
   return { id: rid(), kind, symbol: str(b.symbol, 60), issued: date(b.issued), expires: date(b.expires), org: str(b.org, 120), addedAt: now() };
 }
 
@@ -389,6 +390,16 @@ async function route(req) {
       t.habilitations = [...(t.habilitations || []), h]; t.updatedAt = now();
       await db.put('technicians', t.id, t);
       await log(user, 'habilitation ajoutée', 'technicien', t.id, h.kind + ' ' + h.symbol + ' → ' + h.expires);
+      return ok(t);
+    }
+    if (m === 'DELETE' && r1 && r2 === 'habilitations' && r3) {
+      if (!isAdmin) return deny();
+      const t = await db.get('technicians', r1); if (!t) return notFound();
+      const h = (t.habilitations || []).find((x) => x.id === r3);
+      if (!h) return notFound();
+      t.habilitations = (t.habilitations || []).filter((x) => x.id !== r3); t.updatedAt = now();
+      await db.put('technicians', t.id, t);
+      await log(user, 'habilitation retirée', 'technicien', t.id, (h.kind || '') + ' ' + (h.symbol || ''));
       return ok(t);
     }
     if (m === 'DELETE') return deny('Suppression impossible : désactivez la fiche à la place.');

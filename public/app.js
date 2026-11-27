@@ -20,7 +20,7 @@ const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(
 const ROLE_LABEL = { admin: 'Administrateur', chef: 'Chef d\'équipe', technicien: 'Technicien' };
 const TASK_STATUS = ['À faire', 'En cours', 'Bloquée', 'Terminée', 'Annulée'];
 const ABS_TYPES = ['absence', 'retard', 'congé', 'maladie', 'non-présentation'];
-const HAB_KINDS = ['Électrique (NF C 18-510)', 'CACES', 'AIPR', 'SST', 'Autre'];
+const HAB_KINDS = ['Électrique (NF C 18-510)', 'Nucléaire (RP / SC / HN)', 'CACES', 'AIPR', 'SST', 'Travail en hauteur', 'Autre'];
 
 const ICON = {
   clock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7.5V12l3 1.8"/></svg>',
@@ -215,6 +215,7 @@ function formModal({ title, fields, submitLabel = 'Enregistrer', onSubmit, intro
     const req = f.required ? 'required' : '';
     if (f.type === 'select') return `<label class="f">${esc(f.label)}<select name="${f.name}" ${req}>${f.options.map((o) => { const [val, lab] = Array.isArray(o) ? o : [o, o]; return `<option value="${esc(val)}" ${String(val) === String(v) ? 'selected' : ''}>${esc(lab)}</option>`; }).join('')}</select></label>`;
     if (f.type === 'textarea') return `<label class="f">${esc(f.label)}<textarea name="${f.name}" ${req} placeholder="${esc(f.placeholder || '')}">${esc(v)}</textarea></label>`;
+    if (f.type === 'datalist') return `<label class="f">${esc(f.label)}<input type="text" name="${f.name}" value="${esc(v)}" list="dl-${esc(f.name)}" ${req} placeholder="${esc(f.placeholder || '')}" autocomplete="off"><datalist id="dl-${esc(f.name)}">${(f.options || []).map((o) => { const val = Array.isArray(o) ? o[0] : o; return `<option value="${esc(val)}"></option>`; }).join('')}</datalist></label>`;
     if (f.type === 'checks') return `<div class="f"><b class="small">${esc(f.label)}</b><div class="checks">${f.options.map(([val, lab]) => `<label><input type="checkbox" name="${f.name}" value="${esc(val)}" ${(v || []).includes(val) ? 'checked' : ''}> ${esc(lab)}</label>`).join('') || '<span class="muted">Aucun</span>'}</div></div>`;
     if (f.type === 'photos') return `<label class="f">${esc(f.label)}<input type="file" name="${f.name}" accept="image/*" multiple ${f.capture ? 'capture="environment"' : ''}></label>`;
     return `<label class="f">${esc(f.label)}<input type="${f.type || 'text'}" name="${f.name}" value="${esc(v)}" ${req} ${f.step ? `step="${f.step}"` : ''} ${f.min !== undefined ? `min="${f.min}"` : ''} ${f.max !== undefined ? `max="${f.max}"` : ''} placeholder="${esc(f.placeholder || '')}" ${f.autocomplete ? `autocomplete="${f.autocomplete}"` : ''} ${f.maxlength ? `maxlength="${f.maxlength}"` : ''}></label>`;
@@ -392,11 +393,12 @@ function assignConflicts(a) {
   return out;
 }
 
+const habSymbols = () => [...new Set(DF().technicians.flatMap((t) => (t.habilitations || []).map((h) => h.symbol)).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'fr'));
 function habTable(t, editable = false) {
   const list = currentHabs(t);
   if (!list.length) return '<p class="muted">Aucune habilitation enregistrée.</p>';
-  return `<div class="table-wrap"><table><thead><tr><th>Type</th><th>Symbole</th><th>Délivrée</th><th>Fin de validité</th><th>État</th></tr></thead><tbody>
-    ${list.map((hb) => { const st = habStatus(hb); return `<tr ${editable && isAdmin() ? `class="click" data-hab="${esc(hb.id)}"` : ''}><td class="small">${esc(hb.kind || '–')}</td><td><b>${esc(hb.symbol || '–')}</b></td><td class="small">${fmtD(hb.issued)}</td><td class="small">${fmtD(hb.expires)}</td><td><span class="pill ${st.cls}">${esc(st.label)}</span></td></tr>`; }).join('')}
+  return `<div class="table-wrap"><table><thead><tr><th>Type</th><th>Symbole</th><th>Délivrée</th><th>Fin de validité</th><th>État</th>${editable && isAdmin() ? '<th data-nosort></th>' : ''}</tr></thead><tbody>
+    ${list.map((hb) => { const st = habStatus(hb); return `<tr ${editable && isAdmin() ? `class="click" data-hab="${esc(hb.id)}"` : ''}><td class="small">${esc(hb.kind || '–')}</td><td><b>${esc(hb.symbol || '–')}</b></td><td class="small">${fmtD(hb.issued)}</td><td class="small">${fmtD(hb.expires)}</td><td><span class="pill ${st.cls}">${esc(st.label)}</span></td>${editable && isAdmin() ? `<td><button class="btn sm" data-habdel="${esc(hb.id)}" title="Retirer cette habilitation">Retirer</button></td>` : ''}</tr>`; }).join('')}
   </tbody></table></div>`;
 }
 function allConflicts() {
@@ -1308,7 +1310,7 @@ function techForm(t = null) {
   formModal({ title: t ? 'Modifier la fiche' : 'Nouveau technicien', fields: [
     { name: 'firstName', label: 'Prénom', value: t?.firstName }, { name: 'lastName', label: 'Nom', required: true, value: t?.lastName },
     { name: 'position', label: 'Poste', value: t?.position },
-    { name: 'metier', label: 'Métier', type: 'select', options: ['Électricien', 'Électricien nucléaire', 'Automaticien', 'Chef d\'équipe', 'Bureau d\'études', 'Apprenti', 'Encadrement'], value: t?.metier || 'Électricien' },
+    { name: 'metier', label: 'Métier (choisir ou saisir)', type: 'datalist', options: ['Électricien', 'Électricien nucléaire', 'Automaticien', 'Chef d\'équipe', 'Bureau d\'études', 'Apprenti', 'Encadrement', 'Câbleur', 'Instrumentiste', 'Technicien essais'], value: t?.metier || 'Électricien' },
     { name: 'siteId', label: 'Site de rattachement', type: 'select', options: [['', '– Aucun –'], ...sitesList().map((st) => [st.id, st.name])], value: t?.siteId || (PL.site !== 'all' ? PL.site : '') },
     { name: 'phone', label: 'Téléphone', type: 'tel', value: t?.phone },
     { name: 'email', label: 'Email', type: 'email', value: t?.email }, { name: 'address', label: 'Adresse (visible admin seul)', value: t?.address },
@@ -1345,13 +1347,20 @@ ROUTES.technicien = async (v, id) => {
   </div>`;
   const e1 = $('#edit-t', v); if (e1) e1.onclick = () => techForm(t);
   const eDel = $('#del-t', v); if (eDel) eDel.onclick = async () => { if (await confirmBox(`Supprimer définitivement le technicien ${esc(t.firstName + ' ' + t.lastName)} ? Cette action est irréversible.`, 'Supprimer')) { await api('DELETE', 'technicians/' + t.id); toast('Technicien supprimé'); location.hash = '#/techniciens'; refresh(); } };
-  const addHab = $('#add-hab-icon', v); if (addHab) addHab.onclick = () => { const e2 = $('#add-hab', v); if (e2) e2.click(); else formModal({ title: 'Ajouter / renouveler une habilitation', fields: [{ name: 'kind', label: 'Type', type: 'select', options: HAB_KINDS }, { name: 'symbol', label: 'Symbole / catégorie', required: true }, { name: 'issued', label: 'Date de délivrance', type: 'date' }, { name: 'expires', label: 'Fin de validité', type: 'date', required: true }, { name: 'org', label: 'Organisme' }], onSubmit: async (vals) => { await api('POST', `technicians/${t.id}/habilitations`, vals); toast('Habilitation ajoutée'); refresh(); } }); };
+  const addHab = $('#add-hab-icon', v); if (addHab) addHab.onclick = () => { const e2 = $('#add-hab', v); if (e2) e2.click(); else formModal({ title: 'Ajouter / renouveler une habilitation', fields: [{ name: 'kind', label: 'Type (choisir ou saisir un nouveau référentiel)', type: 'datalist', options: HAB_KINDS, value: 'Électrique (NF C 18-510)' }, { name: 'symbol', label: 'Symbole / catégorie (choisir ou saisir)', type: 'datalist', options: habSymbols(), required: true, placeholder: 'B2V BR, SC2, R486 B…' }, { name: 'issued', label: 'Date de délivrance', type: 'date' }, { name: 'expires', label: 'Fin de validité', type: 'date', required: true }, { name: 'org', label: 'Organisme' }], onSubmit: async (vals) => { await api('POST', `technicians/${t.id}/habilitations`, vals); toast('Habilitation ajoutée'); refresh(); } }); };
   const addAs = $('#add-as-icon', v); if (addAs) addAs.onclick = () => assignForm(t.id);
   const addAbs = $('#add-abs-icon', v); if (addAbs) addAbs.onclick = () => formModal({ title: 'Signaler une absence', fields: [{ name: 'type', label: 'Type', type: 'select', options: [['maladie', 'Maladie'], ['congé', 'Congé'], ['retard', 'Retard'], ['absence', 'Absence']] }, { name: 'start', label: 'Début', type: 'date', required: true }, { name: 'end', label: 'Fin', type: 'date' }, { name: 'motif', label: 'Motif', type: 'textarea' }], onSubmit: async (vals) => { await api('POST', 'absences', { ...vals, techId: t.id }); toast('Absence signalée'); refresh(); } });
-  $$('[data-hab]', v).forEach((tr) => (tr.onclick = () => { if (isAdmin()) { const hb = (t.habilitations || []).find(h => h.id === tr.dataset.hab); if (hb) formModal({ title: 'Renouveler / modifier l\'habilitation', fields: [{ name: 'kind', label: 'Type', type: 'select', options: HAB_KINDS, value: hb.kind }, { name: 'symbol', label: 'Symbole', value: hb.symbol, required: true }, { name: 'issued', label: 'Date de délivrance', type: 'date', value: hb.issued }, { name: 'expires', label: 'Fin de validité', type: 'date', value: hb.expires, required: true }, { name: 'org', label: 'Organisme', value: hb.org }], onSubmit: async (vals) => { await api('POST', `technicians/${t.id}/habilitations`, vals); toast('Habilitation mise à jour'); refresh(); } }); } }));
+  $$('[data-hab]', v).forEach((tr) => (tr.onclick = () => { if (isAdmin()) { const hb = (t.habilitations || []).find(h => h.id === tr.dataset.hab); if (hb) formModal({ title: 'Renouveler / modifier l\'habilitation', fields: [{ name: 'kind', label: 'Type (choisir ou saisir un nouveau référentiel)', type: 'datalist', options: HAB_KINDS, value: hb.kind }, { name: 'symbol', label: 'Symbole (choisir ou saisir)', type: 'datalist', options: habSymbols(), value: hb.symbol, required: true }, { name: 'issued', label: 'Date de délivrance', type: 'date', value: hb.issued }, { name: 'expires', label: 'Fin de validité', type: 'date', value: hb.expires, required: true }, { name: 'org', label: 'Organisme', value: hb.org }], onSubmit: async (vals) => { await api('POST', `technicians/${t.id}/habilitations`, vals); toast('Habilitation mise à jour'); refresh(); } }); } }));
+  $$('[data-habdel]', v).forEach((b) => (b.onclick = async (e) => {
+    e.stopPropagation();
+    if (await confirmBox('Retirer cette habilitation de la fiche ? Les interventions déjà enregistrées restent inchangées.', 'Retirer')) {
+      try { await api('DELETE', `technicians/${t.id}/habilitations/${b.dataset.habdel}`); toast('Habilitation retirée'); refresh(); }
+      catch (err) { toast(err.message); }
+    }
+  }));
   $$('[data-abs]', v).forEach((el) => (el.onclick = () => { location.hash = '#/absences'; }));
   const e2 = $('#add-hab', v); if (e2) e2.onclick = () => formModal({ title: 'Ajouter / renouveler une habilitation', fields: [
-    { name: 'kind', label: 'Type', type: 'select', options: HAB_KINDS }, { name: 'symbol', label: 'Symbole / catégorie (ex. B2V BR, R486 B, Opérateur)', required: true },
+    { name: 'kind', label: 'Type (choisir ou saisir un nouveau référentiel)', type: 'datalist', options: HAB_KINDS, value: 'Électrique (NF C 18-510)' }, { name: 'symbol', label: 'Symbole / catégorie (ex. B2V BR, R486 B, Opérateur)', type: 'datalist', options: habSymbols(), required: true },
     { name: 'issued', label: 'Date de délivrance', type: 'date' }, { name: 'expires', label: 'Fin de validité', type: 'date', required: true }, { name: 'org', label: 'Organisme' },
   ], onSubmit: async (vals) => { await api('POST', `technicians/${t.id}/habilitations`, vals); toast('Habilitation enregistrée'); refresh(); } });
 };
@@ -1429,8 +1438,8 @@ function equipForm(e = null) {
   const TYPES = ['Armoire', 'TGBT', 'Tableau divisionnaire', 'Variateur', 'Moteur', 'Disjoncteur', 'Transformateur', 'Automate', 'Éclairage', 'Luminaire', 'Câble', 'Chemin de câbles', 'Coffret', 'Prise', 'Capteur', 'Autre'];
   formModal({ title: e ? 'Modifier l\'équipement' : 'Nouvel équipement', intro: e ? '' : '<p class="muted small">Un identifiant permanent et son QR code seront créés automatiquement (jamais réutilisés).</p>', fields: [
     { name: 'name', label: 'Désignation', required: true, value: e?.name, maxlength: 150, placeholder: 'Câble U-1000 R2V 4G25 · Luminaire LED 150 W…' },
-    { name: 'type', label: 'Type', type: 'select', options: TYPES, value: e?.type },
-    { name: 'category', label: 'Catégorie d\'inventaire', type: 'select', options: ['Armoire', 'TGBT', 'Tableau', 'Variateur', 'Moteur', 'Disjoncteur', 'Transformateur', 'Automate', 'Éclairage', 'Câble', 'Chemin de câbles', 'Coffret', 'Capteur', 'Autre'], value: e?.category || e?.type },
+    { name: 'type', label: 'Type (choisir ou saisir)', type: 'datalist', options: TYPES, value: e?.type },
+    { name: 'category', label: 'Catégorie d\'inventaire (choisir ou saisir)', type: 'datalist', options: ['Armoire', 'TGBT', 'Tableau', 'Variateur', 'Moteur', 'Disjoncteur', 'Transformateur', 'Automate', 'Éclairage', 'Luminaire', 'Câble', 'Chemin de câbles', 'Coffret', 'Capteur', 'Prise', 'Autre'], value: e?.category || e?.type },
     { name: 'siteId', label: 'Site', type: 'select', options: [['', '–'], ...sitesList().map((st) => [st.id, st.name])], value: e?.siteId || (PL.site !== 'all' ? PL.site : '') },
     { name: 'chantierId', label: 'Chantier / affaire', type: 'select', options: [['', '–'], ...D().chantiers.map((c) => [c.id, c.name])], value: e?.chantierId },
     { name: 'zone', label: 'Zone (salle des machines, bâtiment électrique…)', value: e?.zone },
@@ -1815,7 +1824,7 @@ function vehicleForm(vh = null) {
   formModal({ title: vh ? 'Modifier le véhicule ' + vh.plate : 'Nouveau véhicule', fields: [
     { name: 'plate', label: 'Immatriculation', required: true, value: vh?.plate, placeholder: 'GK-482-MN' },
     { name: 'brand', label: 'Marque', value: vh?.brand }, { name: 'model', label: 'Modèle', value: vh?.model },
-    { name: 'type', label: 'Type', type: 'select', options: VEH_TYPES, value: vh?.type },
+    { name: 'type', label: 'Type (choisir ou saisir)', type: 'datalist', options: VEH_TYPES, value: vh?.type },
     { name: 'siteId', label: 'Site de rattachement', type: 'select', options: [['', '–'], ...sitesList().map((st) => [st.id, st.name])], value: vh?.siteId },
     { name: 'assignedTo', label: 'Technicien affecté', type: 'select', options: [['', 'Non affecté'], ...D().technicians.filter((t) => t.active !== false).map((t) => [t.id, t.firstName + ' ' + t.lastName])], value: vh?.assignedTo },
     { name: 'status', label: 'État', type: 'select', options: VEH_STATUS, value: vh?.status || 'Disponible' },
@@ -1833,6 +1842,22 @@ function vehicleForm(vh = null) {
   } });
 }
 
+function habForm(techId = '') {
+  const techs = DF().technicians.filter((t) => t.active !== false).sort((a, b) => a.lastName.localeCompare(b.lastName));
+  formModal({ title: 'Ajouter une habilitation', intro: '<p class="muted small">Le type et le symbole sont libres : un nouveau référentiel peut être saisi directement. Les anciennes lignes restent en historique.</p>', fields: [
+    { name: 'techId', label: 'Technicien', type: 'select', options: techs.map((t) => [t.id, t.firstName + ' ' + t.lastName + (t.siteId ? ' · ' + siteName(t.siteId) : '')]), value: techId || (techs[0] || {}).id, required: true },
+    { name: 'kind', label: 'Type (choisir ou saisir)', type: 'datalist', options: HAB_KINDS, value: 'Électrique (NF C 18-510)' },
+    { name: 'symbol', label: 'Symbole / catégorie', type: 'datalist', options: habSymbols(), required: true, placeholder: 'B2V BR, SC2, R486 B…' },
+    { name: 'issued', label: 'Date de délivrance', type: 'date', value: todayISO() },
+    { name: 'expires', label: 'Fin de validité', type: 'date', required: true },
+    { name: 'org', label: 'Organisme', placeholder: 'Apave, EDF, interne…' },
+  ], submitLabel: 'Ajouter', onSubmit: async (vals) => {
+    const id = vals.techId; delete vals.techId;
+    await api('POST', `technicians/${id}/habilitations`, vals);
+    toast('Habilitation enregistrée'); await loadData(); render();
+  } });
+}
+
 // ---------------- Habilitations (matrice) ----------------
 ROUTES.habilitations = async (v) => {
   if (isTech()) { v.innerHTML = '<div class="card"><p>La matrice des habilitations est réservée aux responsables.</p></div>'; return; }
@@ -1847,7 +1872,7 @@ ROUTES.habilitations = async (v) => {
   const soon = all.filter((x) => x.st.level >= 1 && x.st.level <= 2 && x.st.n <= horizon).length;
   const alertList = all.filter((x) => x.st.level >= 1 && x.st.n <= horizon).sort((a, b) => a.st.n - b.st.n);
   v.innerHTML = `<div class="head"><div><h1>Habilitations électriques et nucléaires</h1><p class="muted small" style="margin:.3rem 0 0">Matrice techniciens × symboles · ${techs.length} technicien${techs.length > 1 ? 's' : ''} · ${symbols.length} symbole${symbols.length > 1 ? 's' : ''}</p></div>
-    <div class="row"><button class="btn" id="hab-csv">${ICON.doc} Export CSV</button></div></div>
+    <div class="row">${isAdmin() ? `<button class="btn primary" id="new-hab">${ICON.plus} Nouvelle habilitation</button>` : ''}<button class="btn" id="hab-csv">${ICON.doc} Export CSV</button></div></div>
   <div class="grid g4 section">
     ${kpi(all.length, 'Habilitations suivies', '', '', { icon: 'shield', sub: 'Dernière version de chaque symbole' })}
     ${kpi(all.filter((x) => x.st.level === 0).length, 'Valides', 'ok', '', { icon: 'check', sub: 'Aucune action requise' })}
@@ -1876,6 +1901,7 @@ ROUTES.habilitations = async (v) => {
   const kk = $('#hab-kind', v); if (kk) kk.onchange = () => { PL.habKind = kk.value; render(); };
   const hh = $('#hab-horizon', v); if (hh) hh.onchange = () => { PL.habHorizon = Number(hh.value); render(); };
   $$('[data-habtech]', v).forEach((r) => (r.onclick = () => (location.hash = '#/technicien/' + r.dataset.habtech)));
+  const nh = $('#new-hab', v); if (nh) nh.onclick = () => habForm();
   const bc = $('#hab-csv', v); if (bc) bc.onclick = () => download(`habilitations-${todayISO()}.csv`, new Blob([csv([['Technicien', 'Métier', 'Site', 'Type', 'Symbole', 'Délivrée', 'Fin de validité', 'État'], ...all.map(({ t, hb, st }) => [t.firstName + ' ' + t.lastName, t.metier || t.position || '', siteName(t.siteId), hb.kind || '', hb.symbol || '', csvD(hb.issued), csvD(hb.expires), st.label])])], { type: 'text/csv' }));
   sortableTables(v);
 };
