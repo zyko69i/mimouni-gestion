@@ -664,15 +664,32 @@ ROUTES.chantiers = async (v) => {
   const enCours = list.filter(c => c.status === 'En cours').length;
   const termines = list.filter(c => c.status === 'Clôturé').length;
   const enRetard = list.filter(isLate).length;
+  const q = (PL.chQ || '').toLowerCase();
+  const filter = PL.chFilter || 'all';
+  let filtered = list.filter(c => !q || (c.name + ' ' + (c.client||'') + ' ' + (c.address||'')).toLowerCase().includes(q));
+  if (filter === 'cours') filtered = filtered.filter(c => c.status === 'En cours');
+  else if (filter === 'termine') filtered = filtered.filter(c => c.status === 'Clôturé');
+  else if (filter === 'retard') filtered = filtered.filter(isLate);
   v.innerHTML = `<div class="head"><h1>Gestion des chantiers</h1>${isAdmin() ? '<button class="btn primary" id="new-ch">+ Nouveau chantier</button>' : ''}</div>
-  <div class="grid g4" style="margin-bottom:1.5rem">
+  <div class="grid g4" style="margin-bottom:1rem">
     ${kpi(total, 'Total chantiers')}
     ${kpi(enCours, 'En cours')}
     ${kpi(termines, 'Terminés', 'ok')}
     ${kpi(enRetard, 'En retard', enRetard ? 'red' : 'ok')}
   </div>
-  ${list.length ? `<div class="grid g3">${list.map((c) => { const p = progressOf(c.id); const late = isLate(c); return `<a class="card" href="#/chantier/${c.id}" style="text-decoration:none;color:inherit;display:block"><div class="row" style="justify-content:space-between"><b>${esc(c.name)}</b>${statusPill(c.status)}</div><p class="muted small" style="margin:.3rem 0">${esc(c.client || '')} · ${esc(c.address || '')}</p><div class="bar"><i style="width:${p.pct}%"></i></div><div class="row small" style="justify-content:space-between;margin-top:.3rem"><span><b>${String(p.pct).replace('.', ',')} %</b> d'avancement</span>${late ? '<span class="pill red">En retard</span>' : ''}${demoTag(c)}</div></a>`; }).join('')}</div>` : '<div class="card"><p class="muted">Aucun chantier visible.</p></div>'}`;
+  <div class="card" style="margin-bottom:1rem">
+    <div class="row" style="gap:0.5rem;flex-wrap:wrap">
+      <input class="inp" id="chq" placeholder="Rechercher nom, client, adresse…" value="${esc(PL.chQ || '')}" style="flex:1;min-width:160px">
+      <button class="btn sm ${filter==='all'?'dark':''}" data-f="all">Tous</button>
+      <button class="btn sm ${filter==='cours'?'dark':''}" data-f="cours">En cours</button>
+      <button class="btn sm ${filter==='termine'?'dark':''}" data-f="termine">Terminés</button>
+      <button class="btn sm ${filter==='retard'?'dark':''}" data-f="retard">En retard</button>
+    </div>
+  </div>
+  ${filtered.length ? `<div class="grid g3">${filtered.map((c) => { const p = progressOf(c.id); const late = isLate(c); return `<a class="card" href="#/chantier/${c.id}" style="text-decoration:none;color:inherit;display:block"><div class="row" style="justify-content:space-between"><b>${esc(c.name)}</b>${statusPill(c.status)}</div><p class="muted small" style="margin:.3rem 0">${esc(c.client || '')} · ${esc(c.address || '')}</p><div class="bar"><i style="width:${p.pct}%"></i></div><div class="row small" style="justify-content:space-between;margin-top:.3rem"><span><b>${String(p.pct).replace('.', ',')} %</b> d'avancement</span>${late ? '<span class="pill red">En retard</span>' : ''}${demoTag(c)}</div></a>`; }).join('')}</div>` : '<div class="card"><p class="muted">Aucun chantier correspondant.</p></div>'}`;
   const b = $('#new-ch'); if (b) b.onclick = () => chantierForm();
+  $('#chq', v).oninput = (e) => { PL.chQ = e.target.value; clearTimeout(PL.chT); PL.chT = setTimeout(() => render(), 250); };
+  $$('[data-f]', v).forEach(btn => btn.onclick = () => { PL.chFilter = btn.dataset.f; render(); });
 };
 
 function chantierForm(c = null) {
