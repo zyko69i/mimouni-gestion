@@ -686,7 +686,7 @@ ROUTES.chantier = async (v, id) => {
   v.innerHTML = `
   <div class="head"><div><a href="#/chantiers" class="small">← Chantiers</a><h1>${esc(c.name)}${demoTag(c)}</h1></div>
     <div class="row">${statusPill(c.status)}
-      ${isAdmin() ? '<button class="btn sm" id="edit-ch">Modifier</button>' : ''}
+      ${isAdmin() ? '<button class="btn sm" id="edit-ch">Modifier</button><button class="btn sm" style="background:#DC2626;color:#fff" id="del-ch">Supprimer</button>' : ''}
       ${isChef() && c.status === 'En cours' ? '<button class="btn sm" id="propose">Proposer la clôture</button>' : ''}
       ${isAdmin() && c.status === 'Clôture proposée' ? '<button class="btn sm primary" id="close-ch">Valider la clôture</button>' : ''}
       ${!isTech() ? '<button class="btn sm dark" id="pdf">Rapport PDF</button>' : ''}</div></div>
@@ -717,6 +717,7 @@ ROUTES.chantier = async (v, id) => {
   bindPhotos(v);
   const on = (sel, fn) => { const el = $(sel, v); if (el) el.onclick = fn; };
   on('#edit-ch', () => chantierForm(c));
+  on('#del-ch', async () => { if (await confirmBox(`Supprimer définitivement le chantier « ${esc(c.name)} » ? Cette action est irréversible.`, 'Supprimer')) { await api('DELETE', 'chantiers/' + c.id); toast('Chantier supprimé'); location.hash = '#/chantiers'; refresh(); } });
   on('#pdf', () => chantierPDF(c));
   on('#propose', async () => { if (await confirmBox('Proposer la clôture de ce chantier à l\'administrateur ?')) { try { await api('PUT', 'chantiers/' + c.id, { status: 'Clôture proposée' }); } catch (e) { return alertBox(e.message, 'Clôture impossible pour l\'instant'); } toast('Clôture proposée'); refresh(); } });
   on('#close-ch', async () => { if (await confirmBox('Valider la clôture ? Le chantier passera en « Clôturé » (archivé, jamais effacé).')) { try { await api('PUT', 'chantiers/' + c.id, { status: 'Clôturé' }); } catch (e) { return alertBox(e.message, 'Clôture impossible pour l\'instant'); } toast('Chantier clôturé'); refresh(); } });
@@ -865,7 +866,7 @@ ROUTES.technicien = async (v, id) => {
   const as = D().assignments.filter((a) => a.techId === t.id && a.date >= todayISO()).sort((a, b) => a.date.localeCompare(b.date)).slice(0, 15);
   const abs = D().absences.filter((a) => a.techId === t.id).sort((a, b) => b.start.localeCompare(a.start));
   const tasks = D().tasks.filter((x) => x.assignee === t.id);
-  v.innerHTML = `<div class="head"><div>${!isTech() ? '<a href="#/techniciens" class="small">← Techniciens</a>' : ''}<h1>${esc(t.firstName + ' ' + t.lastName)}${demoTag(t)}</h1></div>${isAdmin() ? '<div class="row"><button class="btn sm" id="edit-t">Modifier</button><button class="btn sm primary" id="add-hab">+ Habilitation</button></div>' : ''}</div>
+  v.innerHTML = `<div class="head"><div>${!isTech() ? '<a href="#/techniciens" class="small">← Techniciens</a>' : ''}<h1>${esc(t.firstName + ' ' + t.lastName)}${demoTag(t)}</h1></div>${isAdmin() ? '<div class="row"><button class="btn sm" id="edit-t">Modifier</button><button class="btn sm primary" id="add-hab">+ Habilitation</button><button class="btn sm" style="background:#DC2626;color:#fff" id="del-t">Supprimer</button></div>' : ''}</div>
   <div class="grid g2">
     <div class="card" style="text-align:center">
       ${t.photo ? `<img src="${esc(t.photo)}" alt="Photo" style="width:140px;height:140px;object-fit:cover;border-radius:50%;border:4px solid var(--navy);margin-bottom:1rem">` : `<div style="width:140px;height:140px;border-radius:50%;background:#E2E8F0;margin:0 auto 1rem;display:flex;align-items:center;justify-content:center;font-size:3rem;color:var(--navy)">${esc((t.firstName||'')[0]||'')}${(t.lastName||'')[0]||''}</div>`}
@@ -879,6 +880,7 @@ ROUTES.technicien = async (v, id) => {
     <div class="card"><h2>Historique des tâches</h2>${tasks.map((x) => `<div class="list"><div class="item"><a href="#/chantier/${x.chantierId}">${esc(x.title)}</a><span>${statusPill(x.status)} ${h(realH(x))}</span></div></div>`).join('') || '<p class="muted">Aucune.</p>'}</div>
   </div>`;
   const e1 = $('#edit-t', v); if (e1) e1.onclick = () => techForm(t);
+  const eDel = $('#del-t', v); if (eDel) eDel.onclick = async () => { if (await confirmBox(`Supprimer définitivement le technicien ${esc(t.firstName + ' ' + t.lastName)} ? Cette action est irréversible.`, 'Supprimer')) { await api('DELETE', 'technicians/' + t.id); toast('Technicien supprimé'); location.hash = '#/techniciens'; refresh(); } };
   const e2 = $('#add-hab', v); if (e2) e2.onclick = () => formModal({ title: 'Ajouter / renouveler une habilitation', fields: [
     { name: 'kind', label: 'Type', type: 'select', options: HAB_KINDS }, { name: 'symbol', label: 'Symbole / catégorie (ex. B2V BR, R486 B, Opérateur)', required: true },
     { name: 'issued', label: 'Date de délivrance', type: 'date' }, { name: 'expires', label: 'Fin de validité', type: 'date', required: true }, { name: 'org', label: 'Organisme' },
@@ -973,7 +975,7 @@ ROUTES.equipement = async (v, id) => {
       <div class="row" style="margin-top:.3rem">${canCorrect ? `<button class="btn sm" data-correct="${x.id}">Corriger</button>` : ''}${isAdmin() && x.type !== 'masquage' && !mask ? `<button class="btn sm" data-mask="${x.id}">Masquer</button>` : ''}</div></div>`;
   };
   const ordered = hist.slice().reverse();
-  v.innerHTML = `<div class="head"><div><a href="#/materiel" class="small">← Matériel</a><h1>${esc(e.name)}${demoTag(e)}</h1><span class="muted">${esc(e.id)}</span></div>${isAdmin() ? '<div class="row"><button class="btn sm" id="edit-eq">Modifier</button><button class="btn sm dark" id="print-eq">Imprimer l\'étiquette</button></div>' : ''}</div>
+  v.innerHTML = `<div class="head"><div><a href="#/materiel" class="small">← Matériel</a><h1>${esc(e.name)}${demoTag(e)}</h1><span class="muted">${esc(e.id)}</span></div>${isAdmin() ? '<div class="row"><button class="btn sm" id="edit-eq">Modifier</button><button class="btn sm dark" id="print-eq">Imprimer l\'étiquette</button><button class="btn sm" style="background:#DC2626;color:#fff" id="del-eq">Supprimer</button></div>' : ''}</div>
   <button class="btn primary bigbtn" id="add-int" style="margin-bottom:1rem">+ Ajouter une intervention, une remarque ou des photos</button>
   <div class="grid g2">
     <div class="card"><h2>Fiche</h2><table>
@@ -987,6 +989,7 @@ ROUTES.equipement = async (v, id) => {
   bindPhotos(v);
   const on = (s, f) => { const el = $(s, v); if (el) el.onclick = f; };
   on('#edit-eq', () => equipForm(e));
+  on('#del-eq', async () => { if (await confirmBox(`Supprimer définitivement l\'équipement « ${esc(e.name)} » ? Cette action est irréversible.`, 'Supprimer')) { await api('DELETE', 'equipment/' + e.id); toast('Équipement supprimé'); location.hash = '#/materiel'; refresh(); } });
   on('#print-eq', () => printLabel(e));
   on('#add-int', () => formModal({ title: 'Nouvelle saisie – ' + e.name, fields: [
     { name: 'type', label: 'Type', type: 'select', options: [['intervention', 'Intervention'], ['remarque', 'Remarque'], ['photo', 'Photos']] },
