@@ -884,13 +884,13 @@ function openInterventionForm() {
   const techs = D().technicians.filter(t => t.active !== false);
   const chs = D().chantiers;
   const m = modal(`<div class="head"><h2>Nouvelle intervention</h2><button class="btn" data-close>×</button></div>
-    <form id="inter-form">
-      <label>Nom<input name="name" required></label>
-      <label>Chantier / Client<select name="chantierId"><option value="">—</option>${chs.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('')}</select></label>
-      <label>Date<input type="date" name="date" value="${todayISO()}" required></label>
-      <label>Créneau<input name="slot" placeholder="ex: 08:00-12:00"></label>
-      <label>Technicien<select name="techId">${techs.map(t => `<option value="${t.id}">${esc(t.firstName + ' ' + t.lastName)}</option>`).join('')}</select></label>
-      <label>Statut<select name="status"><option>Planifié</option><option>En attente</option><option>Terminé</option></select></label>
+    <form id="inter-form" style="display:flex;flex-direction:column;gap:0.75rem">
+      <div><label style="display:block;font-size:0.85rem;margin-bottom:0.25rem">Nom de l'intervention</label><input name="name" required style="width:100%;padding:0.5rem;border:1px solid #D1D5DB;border-radius:8px;font-size:16px"></div>
+      <div><label style="display:block;font-size:0.85rem;margin-bottom:0.25rem">Chantier / Client</label><select name="chantierId" style="width:100%;padding:0.5rem;border:1px solid #D1D5DB;border-radius:8px;font-size:16px"><option value="">— Aucun —</option>${chs.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('')}</select></div>
+      <div><label style="display:block;font-size:0.85rem;margin-bottom:0.25rem">Date</label><input type="date" name="date" value="${todayISO()}" required style="width:100%;padding:0.5rem;border:1px solid #D1D5DB;border-radius:8px;font-size:16px"></div>
+      <div><label style="display:block;font-size:0.85rem;margin-bottom:0.25rem">Créneau</label><input name="slot" placeholder="ex: 08:00-12:00" style="width:100%;padding:0.5rem;border:1px solid #D1D5DB;border-radius:8px;font-size:16px"></div>
+      <div><label style="display:block;font-size:0.85rem;margin-bottom:0.25rem">Technicien</label><select name="techId" style="width:100%;padding:0.5rem;border:1px solid #D1D5DB;border-radius:8px;font-size:16px">${techs.map(t => `<option value="${t.id}">${esc(t.firstName + ' ' + t.lastName)}</option>`).join('')}</select></div>
+      <div><label style="display:block;font-size:0.85rem;margin-bottom:0.25rem">Statut</label><select name="status" style="width:100%;padding:0.5rem;border:1px solid #D1D5DB;border-radius:8px;font-size:16px"><option>Planifié</option><option>En attente</option><option>Terminé</option></select></div>
       <div class="actions"><button type="button" class="btn" data-close>Annuler</button><button class="btn primary" type="submit">Enregistrer</button></div>
     </form>`, { close: true });
   document.getElementById('inter-form').onsubmit = async (e) => {
