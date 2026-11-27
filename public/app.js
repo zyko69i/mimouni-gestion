@@ -803,10 +803,9 @@ ROUTES.planning = async (v) => {
   if (canEdit) {
     $('#new-as', v).onclick = () => assignForm();
     $$('[data-assign]', v).forEach((b) => (b.onclick = (e) => { e.preventDefault(); e.stopPropagation(); assignForm(b.dataset.assign); }));
-  }
-  $$('[data-tech]', v).forEach((td) => (td.onclick = (e) => { if (e.target.closest('[data-assign]')) return; location.hash = '#/technicien/' + td.dataset.tech; }));
     $$('[data-as]', v).forEach((el) => (el.onclick = async () => { const a = D().assignments.find((x) => x.id === el.dataset.as); if (!a || a.other) return; if (await confirmBox(`Retirer l'affectation de ${esc(techName(a.techId))} le ${fmtD(a.date)} ?`, 'Retirer')) { await api('DELETE', 'assignments/' + a.id); toast('Affectation retirée'); refresh(); } }));
   }
+  $$('[data-tech]', v).forEach((td) => (td.onclick = (e) => { if (e.target.closest('[data-assign]')) return; location.hash = '#/technicien/' + td.dataset.tech; }));
 };
 function assignForm() {
   const ch = D().chantiers.filter((c) => c.status !== 'Clôturé');
