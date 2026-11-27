@@ -127,12 +127,13 @@ h3 { font-size: 1.05rem; margin: 0.3rem 0 0.5rem; font-weight: 600; }
 }
 main {
   flex: 1;
-  padding: 1.25rem 1rem;
-  padding-top: 4.5rem;
-  padding-bottom: 2rem;
+  padding: 1.5rem 1rem;
+  padding-top: 5rem;
+  padding-bottom: 4rem;
   max-width: 1400px;
   width: 100%;
   margin: 0 auto;
+  overflow-y: auto;
 }
 @media (min-width: 900px) {
   main { padding: 2rem 2.25rem; padding-top: 2rem; }
@@ -339,19 +340,23 @@ tr:last-child td { border-bottom: none; }
   background: rgba(23, 32, 51, 0.4);
   z-index: 100;
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   justify-content: center;
   padding: 1rem;
+  padding-top: 4rem;
+  padding-bottom: 4rem;
+  overflow-y: auto;
 }
 .modal {
   background: var(--white);
   border-radius: var(--r);
   max-width: 560px;
   width: 100%;
-  max-height: 90vh;
-  overflow: auto;
+  max-height: none;
+  overflow: visible;
   box-shadow: 0 20px 40px rgba(23, 54, 93, 0.15);
   padding: 1.5rem;
+  margin: 1rem 0;
 }
 .toast {
   position: fixed;
@@ -369,7 +374,7 @@ tr:last-child td { border-bottom: none; }
 
 /* Responsive improvements */
 @media (max-width: 899px) {
-  main { padding: 1.25rem 1rem; padding-top: 4.5rem; }
+  main { padding: 1.5rem 1rem; padding-top: 5rem; padding-bottom: 5rem; }
 }
 @media (max-width: 640px) {
   .brand-rest, #net-label { display: none; }
