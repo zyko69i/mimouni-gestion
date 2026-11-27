@@ -461,7 +461,7 @@ function renderShell() {
     toggle.style.opacity = '1';
     toggle.style.pointerEvents = 'auto';
     clearTimeout(scrollTimer);
-    scrollTimer = setTimeout(() => {
+    scrollTimer = setTimeout(async () => {
       if (window.innerWidth < 900 && !document.querySelector('.side.open')) {
         toggle.style.opacity = '0';
         toggle.style.pointerEvents = 'none';
@@ -469,11 +469,11 @@ function renderShell() {
     }, 1200);
   }, { passive: true });
   // Show briefly on load then hide
-  setTimeout(() => {
+  setTimeout(async () => {
     if (window.innerWidth < 900) {
       toggle.style.opacity = '1';
       toggle.style.pointerEvents = 'auto';
-      setTimeout(() => { toggle.style.opacity = '0'; toggle.style.pointerEvents = 'none'; }, 1500);
+      setTimeout(async () => { toggle.style.opacity = '0'; toggle.style.pointerEvents = 'none'; }, 1500);
     }
   }, 500);
   toggle.onclick = () => side.classList.toggle('open');
@@ -887,7 +887,7 @@ ROUTES.techniciens = async (v) => {
   <div class="table-wrap"><table><thead><tr><th>Nom</th><th>Poste</th><th>Compétences</th><th>Habilitations</th><th>Aujourd'hui</th></tr></thead><tbody>
   ${list.map((t) => { const worst = currentHabs(t).map(habStatus).sort((a, b) => b.level - a.level)[0]; const ab = absentOn(t.id, todayISO()); return `<tr class="click" data-t="${t.id}"><td><b>${esc(t.firstName + ' ' + t.lastName)}</b>${demoTag(t)}${t.active === false ? ' <span class="pill">Inactif</span>' : ''}</td><td>${esc(t.position || '')}</td><td class="small">${esc((t.skills || []).join(', '))}</td><td>${worst ? `<span class="pill ${worst.cls}">${esc(worst.label)}</span>` : '–'}</td><td>${ab ? `<span class="pill">${esc(absLabel(ab))}</span>` : '<span class="pill green">Disponible</span>'}</td></tr>`; }).join('') || '<tr><td colspan="5" class="muted">Aucun technicien.</td></tr>'}
   </tbody></table></div></div>`;
-  $('#tq', v).oninput = (e) => { PL.techQ = e.target.value; clearTimeout(PL.tqT); PL.tqT = setTimeout(() => { render().then(() => { const i = $('#tq'); i.focus(); i.setSelectionRange(i.value.length, i.value.length); }); }, 300); };
+  $('#tq', v).oninput = (e) => { PL.techQ = e.target.value; clearTimeout(PL.tqT); PL.tqT = setTimeout(async () => { render().then(() => { const i = $('#tq'); i.focus(); i.setSelectionRange(i.value.length, i.value.length); }); }, 300); };
   $$('[data-t]', v).forEach((r) => (r.onclick = () => (location.hash = '#/technicien/' + r.dataset.t)));
   const b = $('#new-t', v); if (b) b.onclick = () => techForm();
 };
@@ -1123,7 +1123,7 @@ ROUTES.scanner = async (v) => {
 
 // ---------------- Rapports PDF et exports ----------------
 function loadScript(src) { return new Promise((res, rej) => { if ($(`script[src="${src}"]`)) return res(); const s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = () => rej(new Error('Chargement impossible : ' + src)); document.head.appendChild(s); }); }
-function download(name, blob) { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000); }
+function download(name, blob) { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); setTimeout(async () => { URL.revokeObjectURL(a.href); a.remove(); }, 1000); }
 const slug = (s) => String(s).normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^A-Za-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 50);
 
 async function chantierPDF(c) {
@@ -1488,6 +1488,7 @@ ROUTES.plus = async (v) => {
   v.innerHTML = `<div class="head"><h1>Plus</h1><span class="muted small">${esc(S.me.name)} · ${esc(ROLE_LABEL[S.me.role])}</span></div><div class="tiles">${navItems().filter(([href]) => !['#/', '#/chantiers', '#/planning', '#/scanner'].includes(href)).map(([href, ic, lab]) => `<a href="${href}">${ICON[ic]}${esc(lab)}</a>`).join('')}</div>`;
 };
 
+
 function initAI() {
   if (document.getElementById('ai-btn')) return;
   const btn = document.createElement('button');
@@ -1497,44 +1498,95 @@ function initAI() {
   btn.style.cssText = 'position:fixed;bottom:1.5rem;right:1.5rem;width:56px;height:56px;border-radius:50%;background:#2563EB;color:#fff;border:none;font-size:1.6rem;box-shadow:0 4px 16px rgba(37,99,235,0.35);z-index:90;cursor:pointer;';
   document.body.appendChild(btn);
   btn.onclick = openAI;
+  loadAIHistory();
 }
+let aiHistory = [];
+function loadAIHistory() {
+  try { aiHistory = JSON.parse(localStorage.getItem('mimouni_ai') || '[]'); } catch { aiHistory = []; }
+}
+function saveAIHistory() { localStorage.setItem('mimouni_ai', JSON.stringify(aiHistory.slice(-40))); }
 function openAI() {
   if (document.querySelector('.ai-panel')) return;
   const panel = document.createElement('div');
   panel.className = 'ai-panel';
-  panel.style.cssText = 'position:fixed;bottom:5rem;right:1rem;width:min(380px,calc(100vw - 2rem));height:420px;background:#fff;border-radius:16px;box-shadow:0 12px 40px rgba(0,0,0,0.18);z-index:91;display:flex;flex-direction:column;overflow:hidden;';
+  panel.style.cssText = 'position:fixed;bottom:5rem;right:1rem;width:min(400px,calc(100vw - 1.5rem));height:min(520px,70vh);background:#fff;border-radius:16px;box-shadow:0 12px 40px rgba(0,0,0,0.2);z-index:91;display:flex;flex-direction:column;overflow:hidden;';
   panel.innerHTML = `
-    <div style="background:#17365D;color:#fff;padding:0.8rem 1rem;display:flex;justify-content:space-between;align-items:center"><b>Assistant Grok</b><button id="ai-close" style="background:none;border:none;color:#fff;font-size:1.3rem;cursor:pointer">×</button></div>
-    <div id="ai-msgs" style="flex:1;overflow-y:auto;padding:1rem;font-size:0.9rem"></div>
-    <div style="padding:0.75rem;border-top:1px solid #e2e8f0;display:flex;gap:0.5rem"><input id="ai-input" placeholder="Posez une question sur vos données…" style="flex:1;padding:0.6rem;border:1px solid #cbd5e1;border-radius:10px"><button id="ai-send" class="btn primary" style="padding:0.6rem 1rem">Envoyer</button></div>`;
+    <div style="background:#17365D;color:#fff;padding:0.75rem 1rem;display:flex;justify-content:space-between;align-items:center"><b>Grok – Assistant MIMOUNI</b><button id="ai-close" style="background:none;border:none;color:#fff;font-size:1.4rem;cursor:pointer">×</button></div>
+    <div id="ai-msgs" style="flex:1;overflow-y:auto;padding:0.8rem;font-size:0.9rem"></div>
+    <div style="padding:0.6rem;border-top:1px solid #e2e8f0;display:flex;gap:0.4rem;align-items:center">
+      <button id="ai-mic" title="Parler" style="background:#F1F5F9;border:none;border-radius:10px;width:40px;height:40px;font-size:1.2rem;cursor:pointer">🎤</button>
+      <input type="file" id="ai-photo" accept="image/*" capture="environment" style="display:none">
+      <button id="ai-cam" title="Photo" style="background:#F1F5F9;border:none;border-radius:10px;width:40px;height:40px;font-size:1.2rem;cursor:pointer">📷</button>
+      <input id="ai-input" placeholder="Écrivez ou parlez…" style="flex:1;padding:0.55rem;border:1px solid #cbd5e1;border-radius:10px;font-size:16px">
+      <button id="ai-send" class="btn primary" style="padding:0.55rem 0.9rem">Envoyer</button>
+    </div>`;
   document.body.appendChild(panel);
   document.getElementById('ai-close').onclick = () => panel.remove();
-  const send = () => {
-    const input = document.getElementById('ai-input');
-    const q = input.value.trim(); if (!q) return;
-    input.value = '';
+  const send = (text) => {
+    const q = (text || document.getElementById('ai-input').value).trim(); if (!q) return;
+    document.getElementById('ai-input').value = '';
     addMsg(q, true);
-    setTimeout(() => addMsg(aiReply(q), false), 400);
+    aiHistory.push({ role: 'user', text: q });
+    setTimeout(async () => {
+      const reply = await aiReply(q);
+      addMsg(reply, false);
+      aiHistory.push({ role: 'assistant', text: reply });
+      saveAIHistory();
+      if ('speechSynthesis' in window) {
+        const u = new SpeechSynthesisUtterance(reply);
+        u.lang = 'fr-FR';
+        speechSynthesis.speak(u);
+      }
+    }, 300);
   };
-  document.getElementById('ai-send').onclick = send;
+  document.getElementById('ai-send').onclick = () => send();
   document.getElementById('ai-input').onkeydown = (e) => { if (e.key === 'Enter') send(); };
-  addMsg('Bonjour ! Je suis Grok, votre assistant dans MIMOUNI. Posez-moi des questions sur les techniciens, chantiers, absences ou le planning.', false);
+  document.getElementById('ai-mic').onclick = () => {
+    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) { alert('Reconnaissance vocale non supportée sur ce navigateur.'); return; }
+    const Rec = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const rec = new Rec();
+    rec.lang = 'fr-FR';
+    rec.onresult = (e) => send(e.results[0][0].transcript);
+    rec.start();
+  };
+  document.getElementById('ai-cam').onclick = () => document.getElementById('ai-photo').click();
+  document.getElementById('ai-photo').onchange = (e) => {
+    const file = e.target.files[0]; if (!file) return;
+    addMsg('📷 Photo envoyée', true);
+    setTimeout(() => addMsg('J’ai bien reçu la photo. Pour l’instant je peux analyser les données textuelles de l’application. Dites-moi ce que vous voulez que je fasse avec cette image.', false), 400);
+  };
+  aiHistory.forEach(m => addMsg(m.text, m.role === 'user'));
+  if (!aiHistory.length) addMsg('Bonjour ! Je suis Grok dans votre application MIMOUNI. Vous pouvez m’écrire, me parler ou m’envoyer une photo. Je connais vos techniciens, chantiers, absences et alertes.', false);
 }
 function addMsg(text, me) {
   const box = document.getElementById('ai-msgs');
   if (!box) return;
   const div = document.createElement('div');
-  div.style.cssText = `margin:0.4rem 0;padding:0.6rem 0.8rem;border-radius:12px;max-width:85%;${me ? 'background:#2563EB;color:#fff;margin-left:auto' : 'background:#F1F5F9;color:#1E293B'}`;
+  div.style.cssText = `margin:0.35rem 0;padding:0.55rem 0.75rem;border-radius:12px;max-width:88%;white-space:pre-wrap;${me ? 'background:#2563EB;color:#fff;margin-left:auto' : 'background:#F1F5F9;color:#1E293B'}`;
   div.textContent = text;
   box.appendChild(div);
   box.scrollTop = box.scrollHeight;
 }
-function aiReply(q) {
+async function aiReply(q) {
   const d = D();
+  const context = `Données actuelles : ${d.technicians.length} techniciens, ${d.chantiers.length} chantiers (${d.chantiers.filter(c => c.status === 'En cours').length} en cours), ${d.absences.length} absences.`;
+  try {
+    const r = await fetch('/.netlify/functions/groq', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages: [
+        { role: 'system', content: 'Tu es Grok, assistant de l\'application MIMOUNI INDUSTRIEL ÉLECTRICITÉ. Réponds en français, de façon concise et utile. ' + context },
+        { role: 'user', content: q }
+      ] })
+    });
+    if (r.ok) {
+      const data = await r.json();
+      return data.choices?.[0]?.message?.content || 'Réponse vide.';
+    }
+  } catch (e) {}
+  // Fallback local
   const low = q.toLowerCase();
-  if (low.includes('technicien') || low.includes('employé') || low.includes('ouvrier')) return `Vous avez ${d.technicians.length} techniciens enregistrés.`;
-  if (low.includes('chantier')) return `Il y a ${d.chantiers.length} chantier(s). ${d.chantiers.filter(c => c.status === 'En cours').length} en cours.`;
-  if (low.includes('absence')) return `Il y a ${d.absences.length} absence(s) enregistrée(s).`;
-  if (low.includes('retard') || low.includes('alerte')) return `Chantiers en retard : ${d.chantiers.filter(isLate).length}. Habilitations à renouveler : ${habAlerts().length}.`;
-  return 'Je peux vous aider sur les techniciens, les chantiers, les absences et les alertes. Posez une question plus précise !';
+  if (low.includes('technicien') || low.includes('employé')) return `Vous avez ${d.technicians.length} techniciens.`;
+  if (low.includes('chantier')) return `Il y a ${d.chantiers.length} chantier(s).`;
+  return 'Je peux vous aider sur les techniciens, chantiers et absences. (Mode local – branchez la clé Groq pour le modèle complet)';
 }
