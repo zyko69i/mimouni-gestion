@@ -1202,7 +1202,7 @@ ROUTES.reglages = async (v) => {
   <div class="card"><h2>Sauvegardes</h2><p class="small">Sauvegarde automatique chaque jour (30 conservées) + sauvegarde manuelle à tout moment. Une restauration fait d'abord une sauvegarde de sécurité et n'efface rien.</p>
     <button class="btn dark" id="bk-now">Sauvegarder maintenant</button> <a class="btn" href="#/rapports">Export complet (ZIP)</a>
     <div class="list" style="margin-top:.6rem">${backups.slice(0, 12).map((b) => `<div class="item"><span class="small">${esc(b)}</span><button class="btn sm" data-restore="${esc(b)}">Restaurer</button></div>`).join('') || '<p class="muted small">Aucune sauvegarde pour l\'instant (la première automatique aura lieu cette nuit).</p>'}</div></div>
-  <div class="card"><h2>Données d'exemple</h2><p class="small">Pour essayer le logiciel : 4 techniciens, 3 chantiers, tâches, planning, absences et équipements, tous marqués « Exemple ».</p>
+  <div class="card"><h2>Données d'exemple</h2><p class="small">Pour essayer le logiciel : 40 techniciens (4 chefs de chantier, 6 chefs d'équipe, 30 électriciens), 5 chantiers, tâches, planning, absences et équipements, tous marqués « Exemple ».</p>
     <div class="row"><button class="btn" id="demo-load">Charger des données d'exemple</button><button class="btn" id="demo-clear">Effacer les données d'exemple</button></div></div>
   </div>`;
   $('#edit-co', v).onclick = () => formModal({ title: 'Fiche contact – MIMOUNI INDUSTRIEL ÉLECTRICITÉ', fields: COMPANY_FIELDS.map(([k, l]) => ({ name: k, label: l, value: co[k] || '', placeholder: '[À COMPLÉTER]' })), onSubmit: async (vals) => { await api('PUT', 'settings/company', vals); toast('Fiche entreprise enregistrée'); refresh(); } });
