@@ -565,9 +565,10 @@ const statusPill = (s) => `<span class="pill ${s === 'Terminée' || s === 'Clôt
 function presentToday() {
   const day = todayISO();
   const techs = D().technicians.filter((t) => t.active !== false);
-  const assigned = new Set(D().assignments.filter((a) => a.date === day).map((a) => a.techId));
-  const present = techs.filter((t) => assigned.has(t.id) && !absentOn(t.id, day));
-  return { present: present.length, assigned: assigned.size, total: techs.length };
+  const assignedIds = new Set(D().assignments.filter((a) => a.date === day).map((a) => a.techId));
+  const absents = techs.filter((t) => absentOn(t.id, day));
+  const present = techs.filter((t) => assignedIds.has(t.id) && !absentOn(t.id, day));
+  return { present: present.length, assigned: assignedIds.size, absents: absents.length, total: techs.length };
 }
 
 ROUTES.home = async (v) => {
@@ -596,13 +597,13 @@ ROUTES.home = async (v) => {
   <div class="grid g4" style="margin-bottom:1.5rem">
     ${kpi(pr.total, 'Techniciens', '', '#/techniciens')}
     ${kpi(active.length, 'Chantiers actifs', '', '#/chantiers')}
-    ${kpi(pendingTasks.length + S.queue.length, 'Interventions en attente', (pendingTasks.length + S.queue.length) ? 'red' : 'ok', '#/chantiers')}
-    ${kpi(habs.length + late.length + blocked.length, 'Alertes importantes', (habs.length + late.length + blocked.length) ? 'red' : 'ok', '#/techniciens')}
+    ${kpi(pendingTasks.length, 'Tâches en retard', pendingTasks.length ? 'red' : 'ok', '#/chantiers')}
+    ${kpi(habs.length, 'Habilitations à renouveler', habs.length ? 'red' : 'ok', '#/techniciens')}
   </div>
   <div class="grid g3" style="margin-bottom:1.5rem">
-    ${kpi(`${pr.present}/${pr.total}`, 'Présents aujourd\'hui', '', '#/techniciens')}
+    ${kpi(`${pr.present}/${pr.total}`, 'Présents (affectés et non absents)', '', '#/planning')}
+    ${kpi(pr.absents, 'Absents aujourd\'hui', pr.absents ? 'red' : 'ok', '#/absences')}
     ${kpi(late.length, 'Chantiers en retard', late.length ? 'red' : 'ok', '#/chantiers')}
-    ${kpi(habs.length, 'Habilitations à renouveler', habs.length ? 'red' : 'ok', '#/techniciens')}
     ${kpi(h(planned) + ' / ' + h(real), 'Heures prévues / réalisées', '', '#/chantiers')}
     ${kpi(eqCount, 'Équipements', '', '#/materiel')}
     ${kpi(blocked.length, 'Tâches bloquantes', blocked.length ? 'red' : 'ok', '#/chantiers')}
