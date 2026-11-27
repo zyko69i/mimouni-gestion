@@ -849,10 +849,12 @@ function techForm(t = null) {
     { name: 'email', label: 'Email', type: 'email', value: t?.email }, { name: 'address', label: 'Adresse (visible admin seul)', value: t?.address },
     { name: 'entryDate', label: 'Date d\'entrée', type: 'date', value: t?.entryDate },
     { name: 'skills', label: 'Compétences (séparées par des virgules)', value: (t?.skills || []).join(', '), placeholder: 'Automatisme, HTA/BT, câblage armoire, variation de vitesse…' },
+    { name: 'photo', label: 'Photo de profil', type: 'photos', capture: true },
     { name: 'active', label: 'Statut', type: 'select', options: [['1', 'Actif'], ['0', 'Inactif (parti)']], value: t && t.active === false ? '0' : '1' },
     { name: 'notes', label: 'Notes', type: 'textarea', value: t?.notes },
   ], onSubmit: async (vals) => {
     const body = { ...vals, skills: vals.skills.split(',').map((s) => s.trim()).filter(Boolean), active: vals.active === '1' };
+    if (vals.photo && vals.photo.length) body.photo = vals.photo[0];
     const r = t ? await api('PUT', 'technicians/' + t.id, body) : await api('POST', 'technicians', body);
     toast('Fiche enregistrée'); await loadData(); location.hash = '#/technicien/' + r.id; render();
   } });
@@ -865,6 +867,11 @@ ROUTES.technicien = async (v, id) => {
   const tasks = D().tasks.filter((x) => x.assignee === t.id);
   v.innerHTML = `<div class="head"><div>${!isTech() ? '<a href="#/techniciens" class="small">← Techniciens</a>' : ''}<h1>${esc(t.firstName + ' ' + t.lastName)}${demoTag(t)}</h1></div>${isAdmin() ? '<div class="row"><button class="btn sm" id="edit-t">Modifier</button><button class="btn sm primary" id="add-hab">+ Habilitation</button></div>' : ''}</div>
   <div class="grid g2">
+    <div class="card" style="text-align:center">
+      ${t.photo ? `<img src="${esc(t.photo)}" alt="Photo" style="width:140px;height:140px;object-fit:cover;border-radius:50%;border:4px solid var(--navy);margin-bottom:1rem">` : `<div style="width:140px;height:140px;border-radius:50%;background:#E2E8F0;margin:0 auto 1rem;display:flex;align-items:center;justify-content:center;font-size:3rem;color:var(--navy)">${esc((t.firstName||'')[0]||'')}${(t.lastName||'')[0]||''}</div>`}
+      <h2 style="margin:0">${esc(t.firstName + ' ' + t.lastName)}</h2>
+      <p class="muted">${esc(t.position || 'Technicien')}</p>
+    </div>
     <div class="card"><h2>Coordonnées</h2><table><tr><th>Poste</th><td>${esc(t.position || '–')}</td></tr><tr><th>Téléphone</th><td>${esc(t.phone || '–')}</td></tr><tr><th>Email</th><td>${esc(t.email || '–')}</td></tr>${t.address !== undefined ? `<tr><th>Adresse</th><td>${esc(t.address || '–')}</td></tr>` : ''}<tr><th>Entrée</th><td>${fmtD(t.entryDate)}</td></tr><tr><th>Compétences</th><td>${(t.skills || []).map((s) => `<span class="pill">${esc(s)}</span>`).join(' ') || '–'}</td></tr></table></div>
     <div class="card"><h2>Habilitations</h2>${habTable(t, true)}<p class="muted small">Alertes : orange à 60 jours, rouge à 30 jours, puis « Expirée ». Un renouvellement ajoute une ligne, l'ancienne reste en historique.</p></div>
     <div class="card"><h2>Prochaines affectations</h2>${as.map((a) => `<div class="list"><div class="item"><span>${fmtD(a.date)} · ${esc(a.slot)}</span><span>${esc(chantierById(a.chantierId)?.name || 'Autre chantier')}</span></div></div>`).join('') || '<p class="muted">Aucune.</p>'}</div>
