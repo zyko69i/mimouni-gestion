@@ -1529,11 +1529,39 @@ function openAI() {
     aiHistory.push({ role: 'user', text: q });
     setTimeout(async () => {
       const reply = await aiReply(q);
-      addMsg(reply, false);
-      aiHistory.push({ role: 'assistant', text: reply });
+      const actionMatch = reply.match(/ACTION:\s*(\{.*\})/s);
+      let display = reply.replace(/ACTION:\s*\{.*\}/s, '').trim();
+      addMsg(display || reply, false);
+      if (actionMatch) {
+        try {
+          const action = JSON.parse(actionMatch[1]);
+          const ok = confirm(`Confirmer l'action : ${JSON.stringify(action)} ?`);
+          if (ok) {
+            let result = 'Action non reconnue';
+            if (action.type === 'create_tech') {
+              const r = await api('POST', 'technicians', { firstName: action.firstName, lastName: action.lastName, position: action.position || 'Technicien', active: true });
+              result = 'Technicien créé : ' + r.id;
+            } else if (action.type === 'delete_tech') {
+              await api('DELETE', 'technicians/' + action.id);
+              result = 'Technicien supprimé';
+            } else if (action.type === 'create_chantier') {
+              const r = await api('POST', 'chantiers', { name: action.name, client: action.client || '', status: 'En préparation' });
+              result = 'Chantier créé : ' + r.id;
+            } else if (action.type === 'delete_chantier') {
+              await api('DELETE', 'chantiers/' + action.id);
+              result = 'Chantier supprimé';
+            }
+            addMsg('✅ ' + result, false);
+            await loadData(); render();
+          } else {
+            addMsg('Action annulée.', false);
+          }
+        } catch (e) { addMsg('Erreur action : ' + e.message, false); }
+      }
+      aiHistory.push({ role: 'assistant', text: display || reply });
       saveAIHistory();
       if ('speechSynthesis' in window) {
-        const u = new SpeechSynthesisUtterance(reply);
+        const u = new SpeechSynthesisUtterance(display || reply);
         u.lang = 'fr-FR';
         speechSynthesis.speak(u);
       }
@@ -1569,13 +1597,24 @@ function addMsg(text, me) {
 }
 async function aiReply(q) {
   const d = D();
-  const context = `Données actuelles : ${d.technicians.length} techniciens, ${d.chantiers.length} chantiers (${d.chantiers.filter(c => c.status === 'En cours').length} en cours), ${d.absences.length} absences.`;
+  const context = `Données actuelles : ${d.technicians.length} techniciens, ${d.chantiers.length} chantiers (${d.chantiers.filter(c => c.status === 'En cours').length} en cours), ${d.absences.length} absences.
+Techniciens : ${d.technicians.slice(0, 10).map(t => t.id + ':' + t.firstName + ' ' + t.lastName).join(', ')}
+Chantiers : ${d.chantiers.slice(0, 8).map(c => c.id + ':' + c.name).join(', ')}`;
   try {
     const r = await fetch('/api/groq', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ messages: [
-        { role: 'system', content: 'Tu es Grok, assistant de l\'application MIMOUNI INDUSTRIEL ÉLECTRICITÉ. Réponds en français, de façon concise et utile. ' + context },
+        { role: 'system', content: `Tu es l'assistant MIMOUNI INDUSTRIEL ÉLECTRICITÉ. Tu peux lire et proposer des modifications.
+Pour proposer une action, termine ta réponse par une ligne exacte :
+ACTION: {type, ...params}
+Types possibles :
+- {type:"create_tech", firstName, lastName, position}
+- {type:"delete_tech", id}
+- {type:"create_chantier", name, client}
+- {type:"delete_chantier", id}
+Sinon, réponds normalement en français.
+${context}` },
         { role: 'user', content: q }
       ] })
     });
@@ -1584,9 +1623,8 @@ async function aiReply(q) {
       return data.choices?.[0]?.message?.content || 'Réponse vide.';
     }
   } catch (e) {}
-  // Fallback local
   const low = q.toLowerCase();
   if (low.includes('technicien') || low.includes('employé')) return `Vous avez ${d.technicians.length} techniciens.`;
   if (low.includes('chantier')) return `Il y a ${d.chantiers.length} chantier(s).`;
-  return 'Je peux vous aider sur les techniciens, chantiers et absences. (Mode local – branchez la clé Groq pour le modèle complet)';
+  return 'Je peux vous aider sur les techniciens, chantiers et absences.';
 }
