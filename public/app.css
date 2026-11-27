@@ -129,7 +129,7 @@ main {
   flex: 1;
   padding: 1.5rem 1rem;
   padding-top: 5rem;
-  padding-bottom: 4rem;
+  padding-bottom: 6rem;
   max-width: 1400px;
   width: 100%;
   margin: 0 auto;
@@ -192,6 +192,11 @@ main {
   align-items: center;
   justify-content: space-between;
   margin-bottom: 1.1rem;
+  padding-right: 0.5rem;
+}
+@media (max-width: 640px) {
+  .head { flex-direction: column; align-items: flex-start; }
+  .head .btn { margin-top: 0.5rem; }
 }
 .head h1 { margin: 0; }
 .row { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
@@ -374,7 +379,7 @@ tr:last-child td { border-bottom: none; }
 
 /* Responsive improvements */
 @media (max-width: 899px) {
-  main { padding: 1.5rem 1rem; padding-top: 5rem; padding-bottom: 5rem; }
+  main { padding: 1.5rem 1rem; padding-top: 5rem; padding-bottom: 6rem; }
 }
 @media (max-width: 640px) {
   .brand-rest, #net-label { display: none; }
