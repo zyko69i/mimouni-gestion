@@ -24,7 +24,7 @@ function store() {
 
 export const COLLECTIONS = [
   'users', 'technicians', 'chantiers', 'tasks', 'assignments',
-  'absences', 'equipment', 'settings', 'timesheets',
+  'absences', 'equipment', 'settings', 'timesheets', 'sites', 'vehicles',
 ];
 
 const safe = (s) => String(s).replace(/[^A-Za-z0-9_.-]/g, '');

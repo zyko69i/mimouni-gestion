@@ -47,6 +47,9 @@ const ICON = {
   check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 12.5l5 5 10-11"/></svg>',
   activity: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l2.5-6 5 12 2.5-6h4"/></svg>',
   pie: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5a8.5 8.5 0 1 0 8.5 8.5H12z"/><path d="M14.5 3.9A8.5 8.5 0 0 1 20.1 9.5h-5.6z"/></svg>',
+  chart: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V4M4 20h16"/><rect x="7.5" y="12" width="3.2" height="5.5" rx="1"/><rect x="13" y="8.5" width="3.2" height="9" rx="1"/><rect x="18.5" y="5.5" width="3.2" height="12" rx="1"/></svg>',
+  truck: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6.5h11v9.5h-11z"/><path d="M13.5 9.5h4.2l3.3 3.4v3.1h-7.5z"/><circle cx="6.4" cy="18.2" r="1.8"/><circle cx="17.4" cy="18.2" r="1.8"/></svg>',
+  globe: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.6"/><path d="M3.6 9.5h16.8M3.6 14.5h16.8"/><path d="M12 3.4c2.4 2.4 3.6 5.3 3.6 8.6s-1.2 6.2-3.6 8.6c-2.4-2.4-3.6-5.3-3.6-8.6S9.6 5.8 12 3.4z"/></svg>',
   shield: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5.5c0 4.6-3 8-7 9.5-4-1.5-7-4.9-7-9.5V6z"/><path d="M9 12l2 2 4-4"/></svg>',
 };
 
@@ -73,7 +76,7 @@ const idb = (() => {
 })();
 
 // ---------------- état ----------------
-const S = { token: localStorage.getItem('mimouni_token') || '', me: null, data: null, online: navigator.onLine, queue: [], rejected: [], route: '', lastSync: null, apiError: false };
+const S = { token: localStorage.getItem('mimouni_token') || '', me: null, data: null, timelog: null, online: navigator.onLine, queue: [], rejected: [], route: '', lastSync: null, apiError: false };
 
 // ---------------- API ----------------
 class Offline extends Error {}
@@ -104,6 +107,9 @@ async function loadData() {
     const d = await api('GET', 'bootstrap');
     S.data = d; S.me = d.me; S.lastSync = new Date().toISOString();
     await idb.set('bootstrap', d);
+    if (d.me && d.me.role !== 'technicien') {
+      try { S.timelog = await api('GET', 'stats/hours'); } catch { S.timelog = S.timelog || null; }
+    }
   } catch (e) {
     if (e instanceof Offline || !navigator.onLine) {
       const d = await idb.get('bootstrap');
@@ -246,18 +252,64 @@ async function compressFiles(files) {
 }
 
 // ---------------- recherches dans les données ----------------
-const D = () => S.data || { chantiers: [], tasks: [], technicians: [], assignments: [], absences: [], equipment: [], users: [], recent: [], timesheets: [] };
+const EMPTY = { chantiers: [], tasks: [], technicians: [], assignments: [], absences: [], equipment: [], users: [], recent: [], timesheets: [], sites: [], vehicles: [] };
+// Données complètes, quel que soit le filtre de site
+const DF = () => S.data || EMPTY;
+// Données visibles : filtre de site global appliqué (les fiches détail utilisent DF)
+let _scCache = { data: null, site: null, out: null };
+function scopedData(full) {
+  const site = PL.site;
+  if (!site || site === 'all') return full;
+  if (_scCache.data === full && _scCache.site === site) return _scCache.out;
+  const chSite = new Map((full.chantiers || []).map((c) => [c.id, c.siteId || '']));
+  const tSite = new Map((full.technicians || []).map((t) => [t.id, t.siteId || '']));
+  const out = {
+    ...full,
+    chantiers: (full.chantiers || []).filter((c) => (c.siteId || '') === site),
+    technicians: (full.technicians || []).filter((t) => (t.siteId || '') === site),
+    assignments: (full.assignments || []).filter((a) => chSite.get(a.chantierId) === site),
+    tasks: (full.tasks || []).filter((t) => chSite.get(t.chantierId) === site),
+    equipment: (full.equipment || []).filter((e) => (e.siteId || chSite.get(e.chantierId) || '') === site),
+    vehicles: (full.vehicles || []).filter((v) => (v.siteId || '') === site),
+    absences: (full.absences || []).filter((a) => tSite.get(a.techId) === site),
+    timesheets: (full.timesheets || []).filter((f) => tSite.get(f.techId) === site),
+    recent: (full.recent || []).filter((e) => (e.siteId || chSite.get(e.chantierId) || '') === site),
+  };
+  _scCache = { data: full, site, out };
+  return out;
+}
+const D = () => scopedData(DF());
 // Heures réalisées d'une tâche = heures pointées et VALIDÉES (feuilles d'heures) + ajustement manuel éventuel
 const realH = (t) => Math.round(((t.tsHours || 0) + (t.doneHours || 0)) * 100) / 100;
-const techById = (id) => D().technicians.find((t) => t.id === id);
+const techById = (id) => DF().technicians.find((t) => t.id === id);
 const techName = (id) => { const t = techById(id); return t ? `${t.firstName} ${t.lastName}`.trim() : (id ? 'Technicien (hors équipe)' : '–'); };
-const chantierById = (id) => D().chantiers.find((c) => c.id === id);
+const chantierById = (id) => DF().chantiers.find((c) => c.id === id);
 const userName = (login) => { const u = (D().users || []).find((x) => x.login === login); return u ? u.name : (login || '–'); };
 const isAdmin = () => S.me && S.me.role === 'admin';
 const isChef = () => S.me && S.me.role === 'chef';
 const isTech = () => S.me && S.me.role === 'technicien';
 const demoTag = (x) => (x && x.demo ? ' <span class="pill demo">Exemple</span>' : '');
 const absLabel = (a) => (({ absence: 'Absent', retard: 'Retard', 'congé': 'Congé', maladie: 'Maladie', 'non-présentation': 'Non-présentation' }[a.type] || a.type));
+// ---- Sites (Paluel, Tricastin, Cruas…)
+const sitesList = () => (DF().sites || []);
+const siteById = (id) => sitesList().find((s) => s.id === id);
+const siteName = (id) => { const s = siteById(id); return s ? s.name : (id || '–'); };
+const siteCode = (id) => { const s = siteById(id); return s ? (s.code || s.name) : '—'; };
+const siteOfChantier = (cid) => { const c = chantierById(cid); return c ? c.siteId || '' : ''; };
+const siteOfTech = (tid) => { const t = techById(tid); return t ? t.siteId || '' : ''; };
+const sitePill = (id) => { const s = siteById(id); return s ? `<span class="pill site">${esc(s.code || s.name)}</span>` : ''; };
+const inSite = (item) => { const f = PL.site; if (!f || f === 'all') return true; return !!item && item.siteId === f; };
+const siteChantiers = () => D().chantiers.filter(inSite);
+const siteTechs = () => D().technicians.filter(inSite);
+const siteEquipment = () => D().equipment.filter((e) => inSite({ siteId: e.siteId || siteOfChantier(e.chantierId) }));
+const siteVehicles = () => (D().vehicles || []).filter(inSite);
+const siteAssignments = () => D().assignments.filter((a) => inSite({ siteId: siteOfChantier(a.chantierId) }));
+const siteTasks = () => D().tasks.filter((t) => inSite({ siteId: siteOfChantier(t.chantierId) }));
+const todayISO2 = () => todayISO();
+const daysTo = (iso) => { if (!iso) return null; const d0 = parseD(todayISO()); const d1 = parseD(iso); return Math.round((d1 - d0) / 864e5); };
+const monthLabel = (key) => { const [y, m] = String(key).split('-'); return ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'][Number(m) - 1] + ' ' + String(y).slice(2); };
+const monthNames = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
+
 
 // ---------------- calculs ----------------
 // Jours fériés français (fixes + Pâques)
@@ -499,12 +551,17 @@ function navGroups() {
     { label: 'Pilotage', items: [
       ['#/', 'home', dashLabel],
       ['#/planning', 'cal', 'Planning'],
-      ...(r !== 'technicien' ? [['#/alertes', 'bell', 'Alertes', alertCount]] : []),
+      ...(r !== 'technicien' ? [
+        ['#/temps', 'chart', 'Temps & production'],
+        ['#/alertes', 'bell', 'Alertes', alertCount],
+      ] : []),
     ] },
     { label: 'Exploitation', items: [
       ['#/chantiers', 'site', 'Chantiers'],
       ['#/pointage', 'clock', r === 'technicien' ? 'Mes heures' : 'Pointage'],
+      ...(r !== 'technicien' ? [['#/habilitations', 'shield', 'Habilitations']] : []),
       ['#/materiel', 'box', 'Matériel'],
+      ...(r !== 'technicien' ? [['#/vehicules', 'truck', 'Parc véhicules']] : []),
       ['#/scanner', 'scan', 'Scanner'],
     ] },
     { label: 'Équipe', items: [
@@ -512,11 +569,15 @@ function navGroups() {
       ['#/absences', 'abs', 'Présences & absences'],
     ] },
   ];
-  if (r !== 'technicien') {
+  if (r === 'admin') {
     groups.push({ label: 'Administration', items: [
+      ['#/sites', 'globe', 'Sites'],
       ['#/rapports', 'doc', 'Rapports'],
-      ...(r === 'admin' ? [['#/journal', 'list', 'Journal'], ['#/reglages', 'gear', 'Réglages']] : []),
+      ['#/journal', 'list', 'Journal'],
+      ['#/reglages', 'gear', 'Réglages'],
     ] });
+  } else if (r === 'chef') {
+    groups.push({ label: 'Administration', items: [['#/rapports', 'doc', 'Rapports']] });
   }
   return groups;
 }
@@ -563,6 +624,7 @@ function renderShell() {
           <span class="tb-crumb">MIMOUNI <span class="tb-sep">/</span> <b id="tb-crumb-page">Tableau de bord</b></span>
           <span class="tb-page" id="tb-page">Tableau de bord</span>
         </div>
+        ${sitesList().length ? `<label class="site-filter" title="Filtrer par site"><span class="sf-ico">${ICON.globe}</span><select id="site-filter" aria-label="Filtrer par site"><option value="all">Tous les sites</option>${sitesList().map((st) => `<option value="${esc(st.id)}" ${PL.site === st.id ? 'selected' : ''}>${esc(st.name)}</option>`).join('')}</select></label>` : ''}
         <button class="tb-search" id="omni-btn" title="Recherche globale">${ICON.search}<span>Rechercher un chantier, un technicien…</span><kbd>⌘K</kbd></button>
         <div class="tb-actions">
           <span class="tb-net"><span class="dot" data-net-dot></span><span data-net-label>En ligne</span><span class="badge-sync" data-sync></span></span>
@@ -583,6 +645,7 @@ function renderShell() {
   scrim.onclick = closeSide;
   side.querySelectorAll('a').forEach((a) => a.addEventListener('click', () => { if (window.innerWidth < 960) closeSide(); }));
   $('#tb-bell').onclick = () => { location.hash = '#/alertes'; };
+  const sf = $('#site-filter'); if (sf) sf.onchange = () => { PL.site = sf.value; render(); };
   $('#omni-btn').onclick = () => openOmni();
   document.addEventListener('keydown', (e) => {
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); openOmni(); }
@@ -630,6 +693,7 @@ function openOmni() {
   D().technicians.slice(0, 40).forEach((t) => add('Techniciens', 'users', t.firstName + ' ' + t.lastName, t.position || '', '#/technicien/' + t.id));
   D().equipment.slice(0, 40).forEach((e) => add('Matériel', 'box', e.name, e.id, '#/equipement/' + e.id));
   D().tasks.slice(0, 60).forEach((t) => add('Tâches', 'list', t.title, chantierById(t.chantierId)?.name || '', '#/chantier/' + t.chantierId));
+  (D().vehicles || []).forEach((vh) => add('Véhicules', 'truck', vh.plate + ' · ' + vehName(vh), siteName(vh.siteId), '#/vehicules'));
 
   const bg = document.createElement('div');
   bg.className = 'cmdk-bg';
@@ -683,7 +747,7 @@ async function render() {
   const map = { chantier: 'chantiers', technicien: 'techniciens', equipement: 'materiel', plus: 'plus' };
   const activeKey = map[key] || key;
   $$('[data-nav]').forEach((a) => { const n = a.dataset.nav.split('/')[1] || 'home'; a.classList.toggle('active', n === activeKey); });
-  const PAGE_LABEL = { home: isTech() ? 'Mon activité' : 'Tableau de bord', chantiers: 'Chantiers', chantier: 'Chantier', planning: 'Planning', pointage: 'Pointage des heures', techniciens: 'Techniciens', technicien: 'Fiche technicien', absences: 'Présences & absences', materiel: 'Matériel', equipement: 'Équipement', scanner: 'Scanner', rapports: 'Rapports', alertes: 'Alertes', journal: "Journal d'activité", reglages: 'Réglages', profil: 'Mon profil', plus: 'Plus', envois: 'Envois refusés' };
+  const PAGE_LABEL = { home: isTech() ? 'Mon activité' : 'Tableau de bord', chantiers: 'Chantiers', chantier: 'Chantier', planning: 'Planning', pointage: 'Pointage des heures', techniciens: 'Techniciens', technicien: 'Fiche technicien', absences: 'Présences & absences', materiel: 'Matériel', equipement: 'Équipement', scanner: 'Scanner', rapports: 'Rapports', alertes: 'Alertes', journal: "Journal d'activité", reglages: 'Réglages', profil: 'Mon profil', plus: 'Plus', envois: 'Envois refusés', vehicules: 'Parc véhicules', habilitations: 'Habilitations', temps: 'Temps & production', sites: 'Sites' };
   const label = PAGE_LABEL[key] || 'Gestion';
   const elPage = $('#tb-page'); if (elPage) elPage.textContent = label;
   const elCrumb = $('#tb-crumb-page'); if (elCrumb) elCrumb.textContent = label;
@@ -803,7 +867,7 @@ ROUTES.home = async (v) => {
   v.innerHTML = `
   <section class="hero">
     <div class="hero-main">
-      <span class="eyebrow">${fmtD(day)} · ${isChef() ? 'Vos chantiers' : "Vue d'ensemble de l'entreprise"}</span>
+      <span class="eyebrow">${fmtD(day)} · ${PL.site !== 'all' ? esc(siteName(PL.site)) : (isChef() ? 'Vos chantiers' : "Vue d'ensemble de l'entreprise")}</span>
       <h1>${esc(greet)}, ${esc(firstName)}</h1>
       <p class="hero-sub">${active.length} chantier${active.length > 1 ? 's' : ''} en cours · ${pr.present} technicien${pr.present > 1 ? 's' : ''} sur le terrain · ${attention ? attention + ' point' + (attention > 1 ? 's' : '') + " d'attention" : 'aucun point bloquant'}</p>
     </div>
@@ -860,6 +924,22 @@ ROUTES.home = async (v) => {
       ${habs.length ? `<div class="list">${habs.map(({ t, hb, st }) => `<a class="item" href="#/technicien/${t.id}" style="text-decoration:none;color:inherit"><span style="flex:1;min-width:0"><b>${esc(t.firstName + ' ' + t.lastName)}</b><br><span class="muted small">${esc(hb.symbol || hb.kind)} – ${fmtD(hb.expires)}</span></span><span class="pill ${st.cls}">${esc(st.label)}</span></a>`).join('')}</div>` : `<div class="empty">${ICON.check}Aucune habilitation à renouveler dans les 60 jours.</div>`}
     </div>
   </div>
+  <div class="grid g23 section">
+    <div class="card">
+      <h2>${ICON.chart} Heures validées par mois <a class="pill" href="#/temps" style="margin-left:auto;text-decoration:none">Détail</a></h2>
+      <p class="muted small" style="margin:-.3rem 0 1rem">Heures pointées et validées, mois par mois.</p>
+      ${monthBars((S.timelog || {}).months || {}, new Date().getFullYear())}
+    </div>
+    <div class="card">
+      <h2>${ICON.truck} Parc & conformité</h2>
+      <p class="muted small" style="margin:-.3rem 0 .9rem">Véhicules et contrôles à traiter.</p>
+      ${(() => { const veh = siteVehicles(); const va = vehicleAlerts(veh); const imm = veh.filter((x) => x.status === 'Atelier' || x.status === 'Hors service').length;
+        return `<div class="mini-row"><div><b>${veh.length}</b><span>véhicules</span></div><div><b>${imm}</b><span>immobilisés</span></div><div><b>${va.length}</b><span>échéances</span></div></div>
+        ${va.length ? `<div class="list" style="margin-top:.8rem">${va.slice(0, 4).map(({ vh, kind, n }) => `<a class="item" href="#/vehicules" style="text-decoration:none;color:inherit"><span style="flex:1;min-width:0"><b>${esc(vh.plate)}</b> – ${esc(kind)}</span><span class="pill ${n < 0 ? 'red' : n <= 15 ? 'red' : 'orange'}">${n < 0 ? 'Dépassé' : 'J-' + n}</span></a>`).join('')}</div>` : `<div class="empty">${ICON.check}Parc à jour.</div>`}`; })()}
+    </div>
+  </div>
+  ${PL.site === 'all' && sitesList().length ? `<div class="card section"><h2>${ICON.globe} Activité par site</h2><p class="muted small" style="margin:-.3rem 0 .9rem">Chantiers ouverts, effectif et heures validées sur l'année.</p>
+    <div class="site-grid">${sitesList().map((st) => { const chs = DF().chantiers.filter((c) => c.siteId === st.id && c.status !== 'Clôturé').length; const eff = DF().technicians.filter((t) => t.siteId === st.id && t.active !== false).length; const y = new Date().getFullYear(); const hrs = monthNames.reduce((a, _, i) => a + ((((S.timelog || {}).months || {})[`${y}-${String(i + 1).padStart(2, '0')}`] || {}).bySite || {})[st.id] || 0, 0); return `<a class="site-mini" href="#/sites"><div class="row" style="justify-content:space-between"><b>${esc(st.name)}</b><span class="pill site">${esc(st.code || '')}</span></div><div class="sc-stats"><div><b>${chs}</b><span>chantiers</span></div><div><b>${eff}</b><span>techniciens</span></div><div><b>${Math.round(hrs).toLocaleString('fr-FR')}</b><span>heures</span></div></div></a>`; }).join('')}</div></div>` : ''}
   <div class="card section">
     <h2>${ICON.list} Activité récente <a class="pill" href="#/journal" style="margin-left:auto;text-decoration:none">Journal</a></h2>
     ${recentFeed()}
@@ -961,7 +1041,7 @@ ROUTES.chantiers = async (v) => {
     </div>
   </div>
   ${filtered.length ? `<div class="grid g3">${filtered.map((c) => { const p = progressOf(c.id); const late = isLate(c); const team = (c.team || []).length; const eq = D().equipment.filter((e) => e.chantierId === c.id).length; return `<a class="card ch-card" href="#/chantier/${c.id}">
-    <div class="row" style="justify-content:space-between;align-items:flex-start;gap:.6rem"><b style="font-size:1rem;letter-spacing:-.01em">${esc(c.name)}</b>${statusPill(c.status)}</div>
+    <div class="row" style="justify-content:space-between;align-items:flex-start;gap:.6rem"><b style="font-size:1rem;letter-spacing:-.01em">${esc(c.name)}</b><span class="row" style="gap:.35rem">${sitePill(c.siteId)}${statusPill(c.status)}</span></div>
     <p class="muted small" style="margin:.35rem 0 .9rem;min-height:1.1rem">${esc(c.client || 'Sans client')}${c.address ? ' · ' + esc(c.address) : ''}</p>
     <div class="row" style="justify-content:space-between;font-size:.78rem;margin-bottom:.45rem"><span class="muted">Avancement</span><b>${String(p.pct).replace('.', ',')} %</b></div>
     <div class="bar ${late ? 'late' : ''}"><i style="width:${p.pct}%"></i></div>
@@ -979,6 +1059,7 @@ function chantierForm(c = null) {
     title: c ? 'Modifier le chantier' : 'Nouveau chantier',
     fields: [
       { name: 'name', label: 'Nom du chantier', required: true, value: c?.name, maxlength: 120 },
+      { name: 'siteId', label: 'Site', type: 'select', options: [['', '– Aucun –'], ...sitesList().map((st) => [st.id, st.name + (st.code ? ' (' + st.code + ')' : '')])], value: c?.siteId || (PL.site !== 'all' ? PL.site : '') },
       { name: 'client', label: 'Client', value: c?.client },
       { name: 'address', label: 'Adresse', value: c?.address },
       { name: 'chefId', label: 'Chef de chantier responsable', type: 'select', options: [['', '– Aucun –'], ...chefs.map((u) => [u.login, u.name + ' (' + ROLE_LABEL[u.role] + ')'])], value: c?.chefId },
@@ -1090,7 +1171,7 @@ async function bindPhotos(root) {
 }
 
 // ---------------- Planning ----------------
-const PL = { mode: 'week', anchor: todayISO() };
+const PL = { mode: 'week', anchor: todayISO(), site: 'all', tempsYear: 0, habHorizon: 60, habKind: '', vehQ: '', vehStatus: '', eqCat: '', techMetier: '' };
 function weekStart(s) { const d = parseD(s); const w = (d.getDay() + 6) % 7; d.setDate(d.getDate() - w); return iso(d); }
 ROUTES.planning = async (v) => {
   const d = D();
@@ -1209,20 +1290,27 @@ function openInterventionForm() {
 ROUTES.techniciens = async (v) => {
   if (isTech()) { location.hash = '#/technicien/' + S.me.technicianId; return; }
   const q = (PL.techQ || '').toLowerCase();
-  const list = D().technicians.filter((t) => !q || (t.firstName + ' ' + t.lastName + ' ' + (t.skills || []).join(' ')).toLowerCase().includes(q)).sort((a, b) => a.lastName.localeCompare(b.lastName));
-  v.innerHTML = `<div class="head"><h1>Techniciens <span class="muted small">(${D().technicians.length})</span></h1>${isAdmin() ? '<button class="btn primary" id="new-t">+ Nouveau technicien</button>' : ''}</div>
-  <div class="card"><input class="inp" id="tq" placeholder="Rechercher un nom ou une compétence…" value="${esc(PL.techQ || '')}">
-  <div class="table-wrap"><table><thead><tr><th>Nom</th><th>Poste</th><th>Compétences</th><th>Habilitations</th><th>Aujourd'hui</th></tr></thead><tbody>
-  ${list.map((t) => { const worst = currentHabs(t).map(habStatus).sort((a, b) => b.level - a.level)[0]; const ab = absentOn(t.id, todayISO()); return `<tr class="click" data-t="${t.id}"><td><b>${esc(t.firstName + ' ' + t.lastName)}</b>${demoTag(t)}${t.active === false ? ' <span class="pill">Inactif</span>' : ''}</td><td>${esc(t.position || '')}</td><td class="small">${esc((t.skills || []).join(', '))}</td><td>${worst ? `<span class="pill ${worst.cls}">${esc(worst.label)}</span>` : '–'}</td><td>${ab ? `<span class="pill">${esc(absLabel(ab))}</span>` : '<span class="pill green">Disponible</span>'}</td></tr>`; }).join('') || '<tr><td colspan="5" class="muted">Aucun technicien.</td></tr>'}
+  const fMetier = PL.techMetier || '';
+  const metiers = [...new Set(D().technicians.map((t) => t.metier).filter(Boolean))].sort();
+  const list = D().technicians.filter((t) => (!q || (t.firstName + ' ' + t.lastName + ' ' + (t.skills || []).join(' ') + ' ' + (t.metier || '')).toLowerCase().includes(q)) && (!fMetier || t.metier === fMetier)).sort((a, b) => a.lastName.localeCompare(b.lastName));
+  v.innerHTML = `<div class="head"><div><h1>Techniciens <span class="muted small">(${D().technicians.length})</span></h1><p class="muted small" style="margin:.3rem 0 0">Électriciens, automaticiens et encadrement répartis sur ${sitesList().length} sites.</p></div>${isAdmin() ? '<button class="btn primary" id="new-t">+ Nouveau technicien</button>' : ''}</div>
+  <div class="card"><div class="toolbar"><input class="inp" id="tq" placeholder="Rechercher un nom, un métier ou une compétence…" value="${esc(PL.techQ || '')}"><select class="inp" id="tmetier" aria-label="Filtrer par métier"><option value="">Tous les métiers</option>${metiers.map((mm) => `<option value="${esc(mm)}" ${fMetier === mm ? 'selected' : ''}>${esc(mm)}</option>`).join('')}</select></div>
+  <div class="table-wrap"><table data-sort><thead><tr><th>Nom</th><th>Métier</th><th>Site</th><th>Compétences</th><th>Habilitations</th><th>Aujourd'hui</th></tr></thead><tbody>
+  ${list.map((t) => { const worst = currentHabs(t).map(habStatus).sort((a, b) => b.level - a.level)[0]; const ab = absentOn(t.id, todayISO()); return `<tr class="click" data-t="${t.id}"><td><b>${esc(t.firstName + ' ' + t.lastName)}</b>${demoTag(t)}${t.active === false ? ' <span class="pill">Inactif</span>' : ''}</td><td class="small">${esc(t.metier || t.position || '–')}</td><td>${sitePill(t.siteId) || '–'}</td><td class="small">${esc((t.skills || []).slice(0, 3).join(', '))}</td><td>${worst ? `<span class="pill ${worst.cls}">${esc(worst.label)}</span>` : '–'}</td><td>${ab ? `<span class="pill">${esc(absLabel(ab))}</span>` : '<span class="pill green">Disponible</span>'}</td></tr>`; }).join('') || '<tr><td colspan="6" class="muted">Aucun technicien.</td></tr>'}
   </tbody></table></div></div>`;
   $('#tq', v).oninput = (e) => { PL.techQ = e.target.value; clearTimeout(PL.tqT); PL.tqT = setTimeout(async () => { render().then(() => { const i = $('#tq'); i.focus(); i.setSelectionRange(i.value.length, i.value.length); }); }, 300); };
+  const tm = $('#tmetier', v); if (tm) tm.onchange = () => { PL.techMetier = tm.value; render(); };
   $$('[data-t]', v).forEach((r) => (r.onclick = () => (location.hash = '#/technicien/' + r.dataset.t)));
   const b = $('#new-t', v); if (b) b.onclick = () => techForm();
+  sortableTables(v);
 };
 function techForm(t = null) {
   formModal({ title: t ? 'Modifier la fiche' : 'Nouveau technicien', fields: [
     { name: 'firstName', label: 'Prénom', value: t?.firstName }, { name: 'lastName', label: 'Nom', required: true, value: t?.lastName },
-    { name: 'position', label: 'Poste', value: t?.position }, { name: 'phone', label: 'Téléphone', type: 'tel', value: t?.phone },
+    { name: 'position', label: 'Poste', value: t?.position },
+    { name: 'metier', label: 'Métier', type: 'select', options: ['Électricien', 'Électricien nucléaire', 'Automaticien', 'Chef d\'équipe', 'Bureau d\'études', 'Apprenti', 'Encadrement'], value: t?.metier || 'Électricien' },
+    { name: 'siteId', label: 'Site de rattachement', type: 'select', options: [['', '– Aucun –'], ...sitesList().map((st) => [st.id, st.name])], value: t?.siteId || (PL.site !== 'all' ? PL.site : '') },
+    { name: 'phone', label: 'Téléphone', type: 'tel', value: t?.phone },
     { name: 'email', label: 'Email', type: 'email', value: t?.email }, { name: 'address', label: 'Adresse (visible admin seul)', value: t?.address },
     { name: 'entryDate', label: 'Date d\'entrée', type: 'date', value: t?.entryDate },
     { name: 'skills', label: 'Compétences (séparées par des virgules)', value: (t?.skills || []).join(', '), placeholder: 'Automatisme, HTA/BT, câblage armoire, variation de vitesse…' },
@@ -1304,24 +1392,55 @@ function labelHTML(e) {
 }
 ROUTES.materiel = async (v) => {
   const q = (PL.eqQ || '').toLowerCase();
-  const list = D().equipment.filter((e) => !q || (e.name + ' ' + e.id + ' ' + e.type + ' ' + e.location).toLowerCase().includes(q)).sort((a, b) => a.name.localeCompare(b.name));
-  v.innerHTML = `<div class="head"><h1>Matériel installé <span class="muted small">(${D().equipment.length})</span></h1>${isAdmin() ? '<button class="btn primary" id="new-eq">+ Nouvel équipement</button>' : ''}</div>
-  <div class="card"><input class="inp" id="eqq" placeholder="Rechercher (désignation, code, type, emplacement)…" value="${esc(PL.eqQ || '')}">
-  <div class="table-wrap"><table><thead><tr><th>Code</th><th>Désignation</th><th>Type</th><th>Chantier / site</th><th>Emplacement</th></tr></thead><tbody>
-  ${list.map((e) => `<tr class="click" data-e="${e.id}"><td><b>${esc(e.id)}</b></td><td>${esc(e.name)}${demoTag(e)}</td><td>${esc(e.type)}</td><td>${esc(chantierById(e.chantierId)?.name || '–')}</td><td>${esc(e.location)}</td></tr>`).join('') || '<tr><td colspan="5" class="muted">Aucun équipement.</td></tr>'}
-  </tbody></table></div></div>`;
-  $('#eqq', v).oninput = (ev) => { PL.eqQ = ev.target.value; clearTimeout(PL.eqT); PL.eqT = setTimeout(() => render().then(() => { const i = $('#eqq'); i.focus(); i.setSelectionRange(i.value.length, i.value.length); }), 300); };
-  $$('[data-e]', v).forEach((r) => (r.onclick = () => (location.hash = '#/equipement/' + r.dataset.e)));
+  const fCat = PL.eqCat || '';
+  const all = siteEquipment();
+  const cats = [...new Set(all.map((e) => e.category || e.type).filter(Boolean))].sort();
+  const list = all.filter((e) => (!q || (e.name + ' ' + e.id + ' ' + e.type + ' ' + (e.location || '') + ' ' + (e.zone || '')).toLowerCase().includes(q)) && (!fCat || (e.category || e.type) === fCat)).sort((a, b) => a.name.localeCompare(b.name));
+  const inService = all.filter((e) => (e.status || 'En service') === 'En service').length;
+  const toCheck = all.filter((e) => (e.status || '') === 'À contrôler' || (e.nextControl && daysUntil(e.nextControl) <= 30)).length;
+  const alertEq = all.filter((e) => e.nextControl && daysUntil(e.nextControl) <= 30).sort((a, b) => String(a.nextControl).localeCompare(String(b.nextControl)));
+  v.innerHTML = `<div class="head"><div><h1>Matériel installé <span class="muted small">(${all.length})</span></h1><p class="muted small" style="margin:.3rem 0 0">Un équipement = une fiche = un QR code. Câbles, luminaires, chemins de câbles, armoires et appareillages.</p></div>${isAdmin() ? '<button class="btn primary" id="new-eq">+ Nouvel équipement</button>' : ''}</div>
+  <div class="grid g4 section">
+    ${kpi(all.length, 'Équipements référencés', '', '', { icon: 'box', sub: `${cats.length} catégories` })}
+    ${kpi(inService, 'En service', 'ok', '', { icon: 'check', sub: 'Exploitation normale' })}
+    ${kpi(all.filter((e) => (e.status || '') === 'Hors service').length, 'Hors service', all.some((e) => e.status === 'Hors service') ? 'warn' : '', '', { icon: 'alert', sub: 'À remettre en état' })}
+    ${kpi(toCheck, 'Contrôles sous 30 j', toCheck ? 'warn' : 'ok', '', { icon: 'clock', sub: 'Maintenance préventive' })}
+  </div>
+  <div class="grid g23 section">
+    <div class="card"><h2>${ICON.pie} Répartition par catégorie</h2><p class="muted small" style="margin:-.3rem 0 .9rem">Inventaire du parc${PL.site !== 'all' ? ' sur le site sélectionné' : ' toutes installations'}.</p>
+      ${donut(cats.map((c, i) => ({ l: c, v: all.filter((e) => (e.category || e.type) === c).length, c: PALETTE[i % PALETTE.length] })), { center: all.length, sub: 'fiches' })}</div>
+    <div class="card"><h2>${ICON.bell} Contrôles à planifier ${alertEq.length ? `<span class="pill orange" style="margin-left:auto">${alertEq.length}</span>` : ''}</h2>
+      <p class="muted small" style="margin:-.3rem 0 .9rem">Équipements dont le prochain contrôle est passé ou proche.</p>
+      ${alertEq.length ? `<div class="list">${alertEq.slice(0, 7).map((e) => `<a class="item" href="#/equipement/${e.id}" style="text-decoration:none;color:inherit"><span style="flex:1;min-width:0"><b>${esc(e.name)}</b><br><span class="muted small">${esc(e.id)} · ${esc(siteName(e.siteId || siteOfChantier(e.chantierId)))}</span></span><span class="pill ${daysUntil(e.nextControl) < 0 ? 'red' : 'orange'}">${daysUntil(e.nextControl) < 0 ? 'Dépassé' : 'J-' + daysUntil(e.nextControl)}</span></a>`).join('')}</div>` : `<div class="empty">${ICON.check}Aucun contrôle en retard.</div>`}</div>
+  </div>
+  <div class="card section">
+    <div class="toolbar"><input class="inp" id="eqq" placeholder="Rechercher (désignation, code, type, emplacement)…" value="${esc(PL.eqQ || '')}"><select class="inp" id="eqcat" aria-label="Filtrer par catégorie"><option value="">Toutes les catégories</option>${cats.map((c) => `<option value="${esc(c)}" ${fCat === c ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select></div>
+  <div class="table-wrap"><table data-sort><thead><tr><th>Code</th><th>Désignation</th><th>Catégorie</th><th>Site</th><th>Zone / emplacement</th><th>État</th><th>Prochain contrôle</th><th data-nosort>QR</th></tr></thead><tbody>
+  ${list.map((e) => `<tr class="click" data-e="${e.id}"><td><b>${esc(e.id)}</b></td><td>${esc(e.name)}${demoTag(e)}${(e.criticality || '') === 'Critique' ? ' <span class="pill red">Critique</span>' : ''}</td><td class="small">${esc(e.category || e.type || '–')}</td><td>${sitePill(e.siteId || siteOfChantier(e.chantierId)) || '–'}</td><td class="small">${esc([e.zone, e.location].filter(Boolean).join(' · ') || '–')}</td><td><span class="pill ${(e.status || 'En service') === 'En service' ? 'green' : e.status === 'Hors service' ? 'red' : 'orange'}">${esc(e.status || 'En service')}</span></td><td class="small" data-v="${e.nextControl ? daysUntil(e.nextControl) : ''}">${esc(e.nextControl ? fmtD(e.nextControl) : '–')}</td><td>${e.labelPrints ? '<span class="pill">' + e.labelPrints + ' impr.</span>' : '<span class="muted small">–</span>'}</td></tr>`).join('') || `<tr><td colspan="8" class="muted">Aucun équipement${q || fCat ? ' ne correspond à ce filtre' : ''}.</td></tr>`}
+  </tbody></table></div>
+  <p class="muted small" style="margin:.7rem 0 0">${list.length} fiche${list.length > 1 ? 's' : ''} affichée${list.length > 1 ? 's' : ''} · cliquez sur une ligne pour ouvrir la fiche et imprimer l'étiquette QR.</p></div>`;
+  const qi = $('#eqq', v); if (qi) qi.oninput = (ev) => { PL.eqQ = ev.target.value; clearTimeout(PL.eqT); PL.eqT = setTimeout(() => render().then(() => { const i = $('#eqq'); if (i) { i.focus(); i.setSelectionRange(i.value.length, i.value.length); } }), 300); };
+  const cs = $('#eqcat', v); if (cs) cs.onchange = () => { PL.eqCat = cs.value; render(); };
+  $$('[data-e]', v).forEach((r) => (r.onclick = () => { location.hash = '#/equipement/' + r.dataset.e; }));
   const b = $('#new-eq', v); if (b) b.onclick = () => equipForm();
+  sortableTables(v);
 };
 function equipForm(e = null) {
+  const TYPES = ['Armoire', 'TGBT', 'Tableau divisionnaire', 'Variateur', 'Moteur', 'Disjoncteur', 'Transformateur', 'Automate', 'Éclairage', 'Luminaire', 'Câble', 'Chemin de câbles', 'Coffret', 'Prise', 'Capteur', 'Autre'];
   formModal({ title: e ? 'Modifier l\'équipement' : 'Nouvel équipement', intro: e ? '' : '<p class="muted small">Un identifiant permanent et son QR code seront créés automatiquement (jamais réutilisés).</p>', fields: [
-    { name: 'name', label: 'Désignation', required: true, value: e?.name, maxlength: 150 },
-    { name: 'type', label: 'Type', type: 'select', options: ['Armoire', 'TGBT', 'Tableau divisionnaire', 'Variateur', 'Moteur', 'Disjoncteur', 'Transformateur', 'Automate', 'Éclairage', 'Autre'], value: e?.type },
+    { name: 'name', label: 'Désignation', required: true, value: e?.name, maxlength: 150, placeholder: 'Câble U-1000 R2V 4G25 · Luminaire LED 150 W…' },
+    { name: 'type', label: 'Type', type: 'select', options: TYPES, value: e?.type },
+    { name: 'category', label: 'Catégorie d\'inventaire', type: 'select', options: ['Armoire', 'TGBT', 'Tableau', 'Variateur', 'Moteur', 'Disjoncteur', 'Transformateur', 'Automate', 'Éclairage', 'Câble', 'Chemin de câbles', 'Coffret', 'Capteur', 'Autre'], value: e?.category || e?.type },
+    { name: 'siteId', label: 'Site', type: 'select', options: [['', '–'], ...sitesList().map((st) => [st.id, st.name])], value: e?.siteId || (PL.site !== 'all' ? PL.site : '') },
+    { name: 'chantierId', label: 'Chantier / affaire', type: 'select', options: [['', '–'], ...D().chantiers.map((c) => [c.id, c.name])], value: e?.chantierId },
+    { name: 'zone', label: 'Zone (salle des machines, bâtiment électrique…)', value: e?.zone },
+    { name: 'location', label: 'Emplacement précis', value: e?.location },
+    { name: 'status', label: 'État', type: 'select', options: ['En service', 'À contrôler', 'Hors service', 'Déposé'], value: e?.status || 'En service' },
+    { name: 'criticality', label: 'Criticité', type: 'select', options: ['Standard', 'Critique'], value: e?.criticality || 'Standard' },
     { name: 'brand', label: 'Marque', value: e?.brand }, { name: 'model', label: 'Modèle', value: e?.model }, { name: 'serial', label: 'N° de série', value: e?.serial },
-    { name: 'chantierId', label: 'Chantier / site', type: 'select', options: [['', '–'], ...D().chantiers.map((c) => [c.id, c.name])], value: e?.chantierId },
-    { name: 'location', label: 'Emplacement précis', value: e?.location }, { name: 'commissioned', label: 'Mise en service', type: 'date', value: e?.commissioned },
-    { name: 'specs', label: 'Caractéristiques électriques', type: 'textarea', value: e?.specs },
+    { name: 'commissioned', label: 'Mise en service', type: 'date', value: e?.commissioned },
+    { name: 'nextControl', label: 'Prochain contrôle', type: 'date', value: e?.nextControl },
+    { name: 'specs', label: 'Caractéristiques techniques', type: 'textarea', value: e?.specs },
   ], submitLabel: e ? 'Enregistrer' : 'Créer la fiche et le QR code', onSubmit: async (vals) => {
     const r = e ? await api('PUT', 'equipment/' + e.id, vals) : await api('POST', 'equipment', vals);
     toast(e ? 'Équipement modifié' : 'Fiche créée – QR code ' + r.id); await loadData(); location.hash = '#/equipement/' + r.id; render();
@@ -1333,7 +1452,7 @@ function printLabel(e) {
   setTimeout(() => window.print(), 50);
 }
 ROUTES.equipement = async (v, id) => {
-  let e = D().equipment.find((x) => x.id === id);
+  let e = DF().equipment.find((x) => x.id === id);
   if (!e) { try { e = await api('GET', 'equipment/' + id); } catch { /* */ } }
   if (!e) { v.innerHTML = `<div class="card"><p class="err">Équipement « ${esc(id)} » introuvable.</p><a href="#/scanner">Retour au scanner</a></div>`; return; }
   let hist = []; let fromCache = false;
@@ -1578,6 +1697,267 @@ async function exportAll(msgEl) {
   msgEl.textContent = `Export terminé : ${Object.values(r.data).filter(Array.isArray).reduce((s, a) => s + a.length, 0)} éléments, ${n} photo(s).`;
 }
 
+// ---------------- Tableaux dynamiques (tri au clic) ----------------
+function sortableTables(scope) {
+  $$('table[data-sort]', scope || document).forEach((tb) => {
+    const ths = $$('thead th', tb);
+    ths.forEach((th, i) => {
+      if (th.dataset.nosort !== undefined) return;
+      th.classList.add('th-sort');
+      th.tabIndex = 0;
+      th.setAttribute('aria-sort', 'none');
+      const run = () => {
+        const dir = th.dataset.dir === 'asc' ? -1 : 1;
+        ths.forEach((x) => { delete x.dataset.dir; x.classList.remove('asc', 'desc'); x.setAttribute('aria-sort', 'none'); });
+        th.dataset.dir = dir === 1 ? 'asc' : 'desc';
+        th.classList.add(dir === 1 ? 'asc' : 'desc');
+        th.setAttribute('aria-sort', dir === 1 ? 'ascending' : 'descending');
+        const body = tb.tBodies[0]; if (!body) return;
+        const cellVal = (r) => {
+          const c = r.cells[i]; if (!c) return '';
+          const raw = c.dataset.v !== undefined ? c.dataset.v : c.textContent.trim();
+          const clean = String(raw).replace(/\u00a0/g, ' ').trim();
+          if (/^-?[\d ]+([.,]\d+)?\s*(h|km|%|j)?$/.test(clean) && clean !== '') return parseFloat(clean.replace(/ /g, '').replace(',', '.'));
+          return clean.toLowerCase();
+        };
+        const rows = [...body.rows];
+        rows.sort((a, b) => {
+          const x = cellVal(a), y = cellVal(b);
+          if (typeof x === 'number' && typeof y === 'number') return (x - y) * dir;
+          return String(x).localeCompare(String(y), 'fr', { numeric: true }) * dir;
+        });
+        rows.forEach((r) => body.appendChild(r));
+      };
+      th.onclick = run;
+      th.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); run(); } };
+    });
+  });
+}
+
+// ---------------- Barres mensuelles continues ----------------
+function monthBars(months, year, { unit = 'h' } = {}) {
+  const keys = monthNames.map((_, i) => `${year}-${String(i + 1).padStart(2, '0')}`);
+  const vals = keys.map((k) => Math.round(((months || {})[k] || {}).total || 0));
+  const max = Math.max(1, ...vals);
+  const total = vals.reduce((a, b) => a + b, 0);
+  if (!total) return '<div class="empty">Aucune heure validée sur cette année.</div>';
+  const cols = keys.map((k, i) => `<div class="mb" title="${esc(monthNames[i] + ' ' + year)} : ${h(vals[i])}">
+      <span class="mb-v">${vals[i] ? Math.round(vals[i]).toLocaleString('fr-FR') : ''}</span>
+      <div class="mb-track"><i style="height:${Math.max(vals[i] ? 4 : 0, (vals[i] / max) * 100)}%"></i></div>
+      <span class="mb-l">${monthNames[i].slice(0, 4)}</span></div>`).join('');
+  const cum = keys.map((k, i) => `<span class="cum-seg" style="flex:${Math.max(vals[i], 0.01)}" title="${esc(monthNames[i])} : ${h(vals[i])}"></span>`).join('');
+  return `<div class="mbars" role="img" aria-label="Heures validées par mois en ${year}">
+    <div class="mbars-grid">${cols}</div>
+    <div class="mbars-foot"><span class="muted small">Cumul ${year}</span><div class="mbars-cum">${cum}</div><b>${h(total)}</b></div>
+  </div>`;
+}
+
+// ---------------- Parc véhicules ----------------
+const VEH_STATUS = ['Disponible', 'Affecté', 'Atelier', 'Hors service'];
+const VEH_TYPES = ['Fourgon', 'Camionnette', 'Voiture', 'Utilitaire', 'Camion nacelle', 'Pick-up'];
+const VEH_STATUS_CLS = { Disponible: 'green', Affecté: 'dark', Atelier: 'orange', 'Hors service': 'red' };
+const vehName = (vh) => [vh.brand, vh.model].filter(Boolean).join(' ') || vh.plate;
+const vehStatusPill = (s) => `<span class="pill ${VEH_STATUS_CLS[s] || ''}">${esc(s || '–')}</span>`;
+function vehicleAlerts(list) {
+  const out = [];
+  list.forEach((vh) => {
+    const checks = [['Contrôle technique', vh.ct, 45], ['Assurance', vh.insurance, 45], ['Révision', vh.nextService, 30]];
+    checks.forEach(([kind, isoDate, limit]) => {
+      if (!isoDate) return;
+      const n = daysUntil(isoDate);
+      if (n <= limit) out.push({ vh, kind, date: isoDate, n });
+    });
+    if (vh.nextServiceKm && vh.km >= vh.nextServiceKm - 1000) out.push({ vh, kind: 'Révision (kilométrage)', date: '', n: -1 });
+  });
+  return out.sort((a, b) => a.n - b.n);
+}
+ROUTES.vehicules = async (v) => {
+  if (isTech()) { v.innerHTML = '<div class="card"><p>Le parc véhicules est réservé aux chefs de chantier et à l\'administrateur.</p></div>'; return; }
+  const all = siteVehicles();
+  const q = (PL.vehQ || '').toLowerCase();
+  const fStatus = PL.vehStatus || '';
+  const list = all.filter((vh) => (!q || (vh.plate + ' ' + vehName(vh) + ' ' + (vh.type || '') + ' ' + techName(vh.assignedTo)).toLowerCase().includes(q)) && (!fStatus || vh.status === fStatus))
+    .sort((a, b) => String(a.plate).localeCompare(String(b.plate)));
+  const alerts = vehicleAlerts(all);
+  const count = (s) => all.filter((x) => x.status === s).length;
+  const totalKm = all.reduce((a, x) => a + (x.km || 0), 0);
+  v.innerHTML = `<div class="head"><div><h1>Parc véhicules <span class="muted small">(${all.length})</span></h1><p class="muted small" style="margin:.3rem 0 0">Flotte, affectations, contrôles techniques et assurances.</p></div>
+    <div class="row">${isAdmin() || isChef() ? `<button class="btn primary" id="new-veh">${ICON.plus} Nouveau véhicule</button>` : ''}</div></div>
+  <div class="grid g4 section">
+    ${kpi(all.length, 'Véhicules', '', '', { icon: 'truck', sub: `${all.filter((x) => x.status === 'Affecté').length} affectés à un technicien` })}
+    ${kpi(count('Disponible'), 'Disponibles', 'ok', '', { icon: 'check', sub: 'Prêts à partir' })}
+    ${kpi(count('Atelier') + count('Hors service'), 'Immobilisés', count('Atelier') + count('Hors service') ? 'warn' : '', '', { icon: 'alert', sub: `${count('Atelier')} atelier · ${count('Hors service')} hors service` })}
+    ${kpi(alerts.length, 'Échéances à traiter', alerts.length ? 'red' : 'ok', '', { icon: 'clock', sub: 'CT, assurance, révision' })}
+  </div>
+  <div class="grid g23 section">
+    <div class="card"><h2>${ICON.pie} État du parc</h2><p class="muted small" style="margin:-.3rem 0 .9rem">${totalKm.toLocaleString('fr-FR')} km cumulés</p>
+      ${donut(VEH_STATUS.map((s, i) => ({ l: s, v: count(s), c: ['#0E9F6E', '#2563EB', '#F59E0B', '#DC2626'][i] })).filter((x) => x.v), { center: all.length, sub: 'véhicules' })}</div>
+    <div class="card"><h2>${ICON.bell} Échéances ${alerts.length ? `<span class="pill red" style="margin-left:auto">${alerts.length}</span>` : ''}</h2>
+      <p class="muted small" style="margin:-.3rem 0 .9rem">Contrôles techniques, assurances et révisions à venir.</p>
+      ${alerts.length ? `<div class="list">${alerts.slice(0, 8).map(({ vh, kind, date, n }) => `<div class="item"><span style="flex:1;min-width:0"><b>${esc(vh.plate)}</b> – ${esc(kind)}<br><span class="muted small">${date ? (n < 0 ? 'dépassé le ' + fmtD(date) : 'échéance le ' + fmtD(date)) : 'seuil kilométrique atteint'}</span></span><span class="pill ${n < 0 ? 'red' : n <= 15 ? 'red' : n <= 45 ? 'orange' : ''}">${n < 0 ? 'Dépassé' : n === 0 ? "Aujourd'hui" : 'J-' + n}</span></div>`).join('')}</div>` : `<div class="empty">${ICON.check}Aucune échéance dans les prochaines semaines.</div>`}</div>
+  </div>
+  <div class="card section">
+    <div class="toolbar"><input class="inp" id="vehq" placeholder="Rechercher une immatriculation, un modèle, un technicien…" value="${esc(PL.vehQ || '')}">
+      <select class="inp" id="veh-status" aria-label="Filtrer par état"><option value="">Tous les états</option>${VEH_STATUS.map((x) => `<option value="${esc(x)}" ${fStatus === x ? 'selected' : ''}>${esc(x)}</option>`).join('')}</select></div>
+    <div class="table-wrap"><table data-sort><thead><tr><th>Immatriculation</th><th>Véhicule</th><th>Type</th><th>Site</th><th>Affecté à</th><th>Kilométrage</th><th>Contrôle technique</th><th>Assurance</th><th>État</th><th data-nosort></th></tr></thead><tbody>
+    ${list.map((vh) => `<tr class="click" data-v="${vh.id}"><td><b>${esc(vh.plate)}</b></td><td>${esc(vehName(vh))}${demoTag(vh)}</td><td class="small">${esc(vh.type || '–')}</td><td>${sitePill(vh.siteId) || '–'}</td><td class="small">${vh.assignedTo ? esc(techName(vh.assignedTo)) : '<span class="muted">Non affecté</span>'}</td><td>${(vh.km || 0).toLocaleString('fr-FR')} km</td><td class="small" data-v="${daysUntil(vh.ct) ?? ''}">${esc(vh.ct ? fmtD(vh.ct) : '–')}</td><td class="small" data-v="${daysUntil(vh.insurance) ?? ''}">${esc(vh.insurance ? fmtD(vh.insurance) : '–')}</td><td>${vehStatusPill(vh.status)}</td><td>${isAdmin() || isChef() ? `<button class="btn sm" data-edit-v="${vh.id}">Modifier</button>` : ''}</td></tr>`).join('') || `<tr><td colspan="10" class="muted">Aucun véhicule${q || fStatus ? ' ne correspond à ce filtre' : ''}.</td></tr>`}
+    </tbody></table></div>
+    <p class="muted small" style="margin:.7rem 0 0">${list.length} véhicule${list.length > 1 ? 's' : ''} affiché${list.length > 1 ? 's' : ''}. Cliquez sur un en-tête pour trier.</p>
+  </div>`;
+  const qq = $('#vehq', v); if (qq) qq.oninput = (e) => { PL.vehQ = e.target.value; clearTimeout(PL.vehT); PL.vehT = setTimeout(() => render().then(() => { const i = $('#vehq'); if (i) { i.focus(); i.setSelectionRange(i.value.length, i.value.length); } }), 300); };
+  const fs = $('#veh-status', v); if (fs) fs.onchange = () => { PL.vehStatus = fs.value; render(); };
+  $$('[data-edit-v]', v).forEach((b) => (b.onclick = (e) => { e.stopPropagation(); vehicleForm(siteVehicles().find((x) => x.id === b.dataset.editV) || DF().vehicles.find((x) => x.id === b.dataset.editV)); }));
+  $$('[data-v]', v).forEach((r) => (r.onclick = () => { const vh = DF().vehicles.find((x) => x.id === r.dataset.v); if (vh && (isAdmin() || isChef())) vehicleForm(vh); }));
+  const nb = $('#new-veh', v); if (nb) nb.onclick = () => vehicleForm();
+  sortableTables(v);
+};
+function vehicleForm(vh = null) {
+  formModal({ title: vh ? 'Modifier le véhicule ' + vh.plate : 'Nouveau véhicule', fields: [
+    { name: 'plate', label: 'Immatriculation', required: true, value: vh?.plate, placeholder: 'GK-482-MN' },
+    { name: 'brand', label: 'Marque', value: vh?.brand }, { name: 'model', label: 'Modèle', value: vh?.model },
+    { name: 'type', label: 'Type', type: 'select', options: VEH_TYPES, value: vh?.type },
+    { name: 'siteId', label: 'Site de rattachement', type: 'select', options: [['', '–'], ...sitesList().map((st) => [st.id, st.name])], value: vh?.siteId },
+    { name: 'assignedTo', label: 'Technicien affecté', type: 'select', options: [['', 'Non affecté'], ...D().technicians.filter((t) => t.active !== false).map((t) => [t.id, t.firstName + ' ' + t.lastName])], value: vh?.assignedTo },
+    { name: 'status', label: 'État', type: 'select', options: VEH_STATUS, value: vh?.status || 'Disponible' },
+    { name: 'km', label: 'Kilométrage', type: 'number', min: 0, value: vh?.km },
+    { name: 'fuel', label: 'Énergie', type: 'select', options: ['Diesel', 'Essence', 'Électrique', 'Hybride', 'GPL'], value: vh?.fuel || 'Diesel' },
+    { name: 'ct', label: 'Contrôle technique', type: 'date', value: vh?.ct },
+    { name: 'insurance', label: 'Assurance', type: 'date', value: vh?.insurance },
+    { name: 'nextService', label: 'Prochaine révision', type: 'date', value: vh?.nextService },
+    { name: 'nextServiceKm', label: 'Révision au kilométrage', type: 'number', min: 0, value: vh?.nextServiceKm },
+    { name: 'notes', label: 'Notes', type: 'textarea', value: vh?.notes },
+  ], submitLabel: vh ? 'Enregistrer' : 'Créer le véhicule', onSubmit: async (vals) => {
+    if (!vh && !vals.assignedTo) vals.status = vals.status || 'Disponible';
+    const r = vh ? await api('PUT', 'vehicles/' + vh.id, vals) : await api('POST', 'vehicles', vals);
+    toast(vh ? 'Véhicule mis à jour' : 'Véhicule ' + r.plate + ' créé'); await refresh();
+  } });
+}
+
+// ---------------- Habilitations (matrice) ----------------
+ROUTES.habilitations = async (v) => {
+  if (isTech()) { v.innerHTML = '<div class="card"><p>La matrice des habilitations est réservée aux responsables.</p></div>'; return; }
+  const horizon = Number(PL.habHorizon || 60);
+  const kind = PL.habKind || '';
+  const techs = siteTechs().filter((t) => t.active !== false).sort((a, b) => a.lastName.localeCompare(b.lastName));
+  const KINDS = [...new Set(D().technicians.flatMap((t) => currentHabs(t).map((x) => x.kind || 'Autre')))].sort();
+  const habsOf = (t) => currentHabs(t).filter((x) => (!kind || (x.kind || 'Autre') === kind));
+  const symbols = [...new Set(techs.flatMap((t) => habsOf(t).map((x) => x.symbol || '–')))].sort((a, b) => a.localeCompare(b, 'fr'));
+  const all = techs.flatMap((t) => habsOf(t).map((x) => ({ t, hb: x, st: habStatus(x) })));
+  const exp = all.filter((x) => x.st.level === 3).length;
+  const soon = all.filter((x) => x.st.level >= 1 && x.st.level <= 2 && x.st.n <= horizon).length;
+  const alertList = all.filter((x) => x.st.level >= 1 && x.st.n <= horizon).sort((a, b) => a.st.n - b.st.n);
+  v.innerHTML = `<div class="head"><div><h1>Habilitations électriques et nucléaires</h1><p class="muted small" style="margin:.3rem 0 0">Matrice techniciens × symboles · ${techs.length} technicien${techs.length > 1 ? 's' : ''} · ${symbols.length} symbole${symbols.length > 1 ? 's' : ''}</p></div>
+    <div class="row"><button class="btn" id="hab-csv">${ICON.doc} Export CSV</button></div></div>
+  <div class="grid g4 section">
+    ${kpi(all.length, 'Habilitations suivies', '', '', { icon: 'shield', sub: 'Dernière version de chaque symbole' })}
+    ${kpi(all.filter((x) => x.st.level === 0).length, 'Valides', 'ok', '', { icon: 'check', sub: 'Aucune action requise' })}
+    ${kpi(soon, `À renouveler sous ${horizon} j`, soon ? 'warn' : 'ok', '', { icon: 'clock', sub: 'Orange à 60 j, rouge à 30 j' })}
+    ${kpi(exp, 'Expirées', exp ? 'red' : 'ok', '', { icon: 'alert', sub: exp ? 'Interdiction d\'intervention' : 'Aucune' })}
+  </div>
+  <div class="card section">
+    <div class="toolbar">
+      <label class="f inline"><span>Type</span><select class="inp" id="hab-kind"><option value="">Tous les types</option>${KINDS.map((k) => `<option value="${esc(k)}" ${kind === k ? 'selected' : ''}>${esc(k)}</option>`).join('')}</select></label>
+      <label class="f inline"><span>Horizon</span><select class="inp" id="hab-horizon">${[30, 60, 90].map((n) => `<option value="${n}" ${horizon === n ? 'selected' : ''}>${n} jours</option>`).join('')}</select></label>
+      <span class="muted small" style="margin-left:auto">Cliquez sur un nom pour ouvrir la fiche.</span>
+    </div>
+    ${techs.length && symbols.length ? `<div class="hm-wrap"><table class="hm"><thead><tr><th class="hm-name" data-nosort>Technicien</th>${symbols.map((sy) => `<th title="${esc(sy)}"><span>${esc(sy)}</span></th>`).join('')}</tr></thead><tbody>
+    ${techs.map((t) => `<tr><td class="hm-name"><a href="#/technicien/${t.id}"><b>${esc(t.lastName.toUpperCase())}</b> ${esc(t.firstName)}</a><br><span class="muted small">${esc(t.metier || t.position || '')}</span></td>
+      ${symbols.map((sy) => { const hb = habsOf(t).find((x) => (x.symbol || '–') === sy); if (!hb) return '<td class="hm-cell"><span class="hm-none" title="Non détenue">·</span></td>'; const st = habStatus(hb); const cls = st.level === 3 ? 'bad' : st.level >= 1 && st.n <= horizon ? 'warn' : 'ok'; return `<td class="hm-cell"><a class="hm-dot ${cls}" href="#/technicien/${t.id}" title="${esc(sy)} · ${esc(st.label)} · ${esc(fmtD(hb.expires))}">${st.level === 3 ? '×' : st.level >= 1 && st.n <= horizon ? '!' : '✓'}</a></td>`; }).join('')}
+    </tr>`).join('')}</tbody></table></div>
+    <div class="legend hm-legend"><span><i class="dot ok"></i>Valide</span><span><i class="dot warn"></i>Échéance proche</span><span><i class="dot bad"></i>Expirée</span><span><i class="dot none"></i>Non détenue</span></div>` : '<div class="empty">Aucune habilitation à afficher avec ces filtres.</div>'}
+  </div>
+  <div class="card section">
+    <h2>${ICON.bell} Échéances à traiter ${alertList.length ? `<span class="pill red" style="margin-left:auto">${alertList.length}</span>` : ''}</h2>
+    <p class="muted small" style="margin:-.3rem 0 .9rem">Habilitations expirées ou arrivant à échéance dans ${horizon} jours.</p>
+    <div class="table-wrap"><table data-sort><thead><tr><th>Technicien</th><th>Site</th><th>Type</th><th>Symbole</th><th>Fin de validité</th><th>État</th></tr></thead><tbody>
+    ${alertList.map(({ t, hb, st }) => `<tr class="click" data-habtech="${t.id}"><td><b>${esc(t.firstName + ' ' + t.lastName)}</b></td><td>${sitePill(t.siteId) || '–'}</td><td class="small">${esc(hb.kind || '–')}</td><td>${esc(hb.symbol || '–')}</td><td data-v="${st.n}">${fmtD(hb.expires)}</td><td><span class="pill ${st.cls}">${esc(st.label)}</span></td></tr>`).join('') || '<tr><td colspan="6" class="muted">Aucune échéance dans cet horizon.</td></tr>'}
+    </tbody></table></div>
+  </div>`;
+  const kk = $('#hab-kind', v); if (kk) kk.onchange = () => { PL.habKind = kk.value; render(); };
+  const hh = $('#hab-horizon', v); if (hh) hh.onchange = () => { PL.habHorizon = Number(hh.value); render(); };
+  $$('[data-habtech]', v).forEach((r) => (r.onclick = () => (location.hash = '#/technicien/' + r.dataset.habtech)));
+  const bc = $('#hab-csv', v); if (bc) bc.onclick = () => download(`habilitations-${todayISO()}.csv`, new Blob([csv([['Technicien', 'Métier', 'Site', 'Type', 'Symbole', 'Délivrée', 'Fin de validité', 'État'], ...all.map(({ t, hb, st }) => [t.firstName + ' ' + t.lastName, t.metier || t.position || '', siteName(t.siteId), hb.kind || '', hb.symbol || '', csvD(hb.issued), csvD(hb.expires), st.label])])], { type: 'text/csv' }));
+  sortableTables(v);
+};
+
+// ---------------- Temps & production ----------------
+ROUTES.temps = async (v) => {
+  if (isTech()) { v.innerHTML = '<div class="card"><p>Le suivi du temps est réservé aux responsables.</p></div>'; return; }
+  const tl = S.timelog || { months: {} };
+  const months = tl.months || {};
+  const years = [...new Set(Object.keys(months).map((k) => Number(k.slice(0, 4))))].sort((a, b) => b - a);
+  const year = Number(PL.tempsYear || years[0] || new Date().getFullYear());
+  const keys = monthNames.map((_, i) => `${year}-${String(i + 1).padStart(2, '0')}`);
+  const yearTotal = keys.reduce((a, k) => a + (months[k]?.total || 0), 0);
+  const thisMonth = todayISO().slice(0, 7);
+  const monthTotal = months[thisMonth]?.total || 0;
+  const techs = siteTechs().filter((t) => t.active !== false);
+  const byTech = techs.map((t) => ({ t, hours: keys.reduce((a, k) => a + ((months[k]?.byTech || {})[t.id] || 0), 0) })).sort((a, b) => b.hours - a.hours);
+  const activeTechs = byTech.filter((x) => x.hours > 0).length;
+  const avg = activeTechs ? yearTotal / activeTechs : 0;
+  const bySite = sitesList().filter((st) => PL.site === 'all' || st.id === PL.site).map((st) => ({ l: st.name, v: Math.round(keys.reduce((a, k) => a + ((months[k]?.bySite || {})[st.id] || 0), 0)) }));
+  const byChantier = siteChantiers().map((c) => ({ l: c.name, v: Math.round(keys.reduce((a, k) => a + ((months[k]?.byChantier || {})[c.id] || 0), 0)) })).filter((x) => x.v > 0).sort((a, b) => b.v - a.v);
+  v.innerHTML = `<div class="head"><div><h1>Temps & production</h1><p class="muted small" style="margin:.3rem 0 0">Heures validées, mois par mois et par année. Source : feuilles d'heures validées.</p></div>
+    <div class="row">${years.length ? `<label class="f inline"><span>Année</span><select class="inp" id="temps-year">${years.map((y) => `<option value="${y}" ${y === year ? 'selected' : ''}>${y}</option>`).join('')}</select></label>` : ''}${isAdmin() ? `<button class="btn sm" id="temps-rebuild" title="Recalculer depuis les feuilles d'heures validées">Recalculer</button>` : ''}</div></div>
+  <div class="grid g4 section">
+    ${kpi(h(yearTotal), 'Heures validées ' + year, '', '', { icon: 'clock', sub: `${Object.keys(months).length} mois d'historique` })}
+    ${kpi(h(monthTotal), 'Mois en cours', '', '', { icon: 'cal', sub: monthLabel(thisMonth) })}
+    ${kpi(activeTechs, 'Techniciens actifs', '', '', { icon: 'users', sub: `${techs.length} techniciens${PL.site !== 'all' ? ' sur le site' : ''}` })}
+    ${kpi(h(avg), 'Moyenne par technicien', '', '', { icon: 'chart', sub: 'Sur l\'année sélectionnée' })}
+  </div>
+  <div class="card section">
+    <h2>${ICON.chart} Heures validées par mois – ${year}</h2>
+    <p class="muted small" style="margin:-.3rem 0 1.2rem">Chaque barre représente un mois ; la bande continue sous les barres montre la répartition cumulée de l'année.</p>
+    ${monthBars(months, year)}
+  </div>
+  <div class="grid g2 section">
+    <div class="card"><h2>${ICON.site} Par site</h2><p class="muted small" style="margin:-.3rem 0 .9rem">Volume horaire validé sur ${year}.</p>${hbars(bySite, { unit: 'h', max: Math.max(1, ...bySite.map((x) => x.v)) })}</div>
+    <div class="card"><h2>${ICON.box} Par chantier</h2><p class="muted small" style="margin:-.3rem 0 .9rem">Répartition des heures par chantier.</p>${hbars(byChantier.slice(0, 8), { unit: 'h', max: Math.max(1, ...byChantier.map((x) => x.v)) })}</div>
+  </div>
+  <div class="card section">
+    <h2>${ICON.users} Détail par technicien</h2>
+    <div class="table-wrap"><table data-sort><thead><tr><th>Technicien</th><th>Métier</th><th>Site</th><th>Heures ${year}</th><th>Part</th><th>Mois en cours</th></tr></thead><tbody>
+    ${byTech.map(({ t, hours }) => `<tr class="click" data-t="${t.id}"><td><b>${esc(t.firstName + ' ' + t.lastName)}</b></td><td class="small">${esc(t.metier || t.position || '–')}</td><td>${sitePill(t.siteId) || '–'}</td><td data-v="${hours}">${h(hours)}</td><td data-v="${yearTotal ? hours / yearTotal : 0}"><div class="bar thin"><i style="width:${yearTotal ? Math.min(100, (hours / yearTotal) * 400) : 0}%"></i></div></td><td>${h((months[thisMonth]?.byTech || {})[t.id] || 0)}</td></tr>`).join('') || '<tr><td colspan="6" class="muted">Aucune heure validée.</td></tr>'}
+    </tbody></table></div>
+  </div>`;
+  const ysel = $('#temps-year', v); if (ysel) ysel.onchange = () => { PL.tempsYear = Number(ysel.value); render(); };
+  const rb = $('#temps-rebuild', v); if (rb) rb.onclick = async () => { rb.disabled = true; try { S.timelog = await api('POST', 'stats/rebuild'); toast('Statistiques recalculées'); render(); } catch (e) { toast(e.message); rb.disabled = false; } };
+  $$('[data-t]', v).forEach((r) => (r.onclick = () => (location.hash = '#/technicien/' + r.dataset.t)));
+  sortableTables(v);
+};
+
+// ---------------- Sites ----------------
+ROUTES.sites = async (v) => {
+  if (!isAdmin()) { v.innerHTML = '<div class="card">Réservé à l\'administrateur.</div>'; return; }
+  const sites = sitesList();
+  v.innerHTML = `<div class="head"><div><h1>Sites d'intervention <span class="muted small">(${sites.length})</span></h1><p class="muted small" style="margin:.3rem 0 0">Chaque technicien, chantier et équipement est rattaché à un site.</p></div><button class="btn primary" id="new-site">${ICON.plus} Nouveau site</button></div>
+  <div class="grid g3 section">${sites.map((st) => {
+    const techs = DF().technicians.filter((t) => t.siteId === st.id && t.active !== false).length;
+    const chs = DF().chantiers.filter((c) => c.siteId === st.id && c.status !== 'Clôturé').length;
+    const eqs = DF().equipment.filter((e) => (e.siteId || '') === st.id).length;
+    const vehs = (DF().vehicles || []).filter((x) => x.siteId === st.id).length;
+    const habs = DF().technicians.filter((t) => t.siteId === st.id).flatMap(currentHabs).filter((hb) => habStatus(hb).level >= 1).length;
+    return `<div class="card site-card"><div class="sc-top"><span class="kpi-ico">${ICON.globe}</span><div><h2 style="margin:0">${esc(st.name)}</h2><span class="muted small">${esc(st.code || st.id)}${st.address ? ' · ' + esc(st.address) : ''}</span></div></div>
+      <div class="sc-stats"><div><b>${techs}</b><span>techniciens</span></div><div><b>${chs}</b><span>chantiers</span></div><div><b>${eqs}</b><span>équipements</span></div><div><b>${vehs}</b><span>véhicules</span></div></div>
+      ${habs ? `<p class="small" style="margin:.6rem 0 0"><span class="pill orange">${habs} habilitation${habs > 1 ? 's' : ''} à suivre</span></p>` : ''}
+      <div class="row" style="margin-top:.8rem"><button class="btn sm" data-site-edit="${st.id}">Modifier</button><a class="btn sm" href="#/chantiers">Voir les chantiers</a></div></div>`;
+  }).join('') || '<div class="card"><p class="muted">Aucun site. Créez Paluel, Tricastin et Cruas pour structurer l\'activité.</p></div>'}</div>`;
+  const nb = $('#new-site', v); if (nb) nb.onclick = () => siteForm();
+  $$('[data-site-edit]', v).forEach((b) => (b.onclick = () => siteForm(sites.find((x) => x.id === b.dataset.siteEdit))));
+};
+function siteForm(st = null) {
+  formModal({ title: st ? 'Modifier le site' : 'Nouveau site', fields: [
+    { name: 'name', label: 'Nom du site', required: true, value: st?.name, placeholder: 'Paluel' },
+    { name: 'code', label: 'Code court', value: st?.code, placeholder: 'PAL' },
+    { name: 'address', label: 'Adresse', value: st?.address },
+    { name: 'manager', label: 'Responsable', value: st?.manager },
+    { name: 'notes', label: 'Notes', type: 'textarea', value: st?.notes },
+  ], submitLabel: st ? 'Enregistrer' : 'Créer le site', onSubmit: async (vals) => {
+    if (st) await api('PUT', 'sites/' + st.id, vals); else await api('POST', 'sites', vals);
+    toast(st ? 'Site mis à jour' : 'Site créé'); await refresh();
+  } });
+}
+
 // ---------------- Alertes ----------------
 ROUTES.alertes = async (v) => {
   const habs = habAlerts(); const late = D().chantiers.filter(isLate); const blocked = D().tasks.filter((t) => t.status === 'Bloquée'); const conf = allConflicts();
@@ -1813,7 +2193,7 @@ ROUTES.profil = async (v) => {
   $('#out', v).onclick = () => logout();
 };
 ROUTES.plus = async (v) => {
-  const DESCR = { '#/pointage': 'Saisir et valider les heures', '#/materiel': 'Équipements et interventions', '#/techniciens': 'Fiches, habilitations, rôles', '#/absences': 'Congés, arrêts, disponibilité', '#/rapports': 'Synthèses et exports', '#/alertes': 'Habilitations et retards', '#/journal': "Historique des actions", '#/reglages': 'Entreprise, données, sauvegardes', '#/scanner': 'Identifier un équipement', '#/planning': 'Affectations de la semaine', '#/chantiers': 'Tous les chantiers' };
+  const DESCR = { '#/pointage': 'Saisir et valider les heures', '#/materiel': 'Équipements et interventions', '#/techniciens': 'Fiches, habilitations, rôles', '#/absences': 'Congés, arrêts, disponibilité', '#/rapports': 'Synthèses et exports', '#/alertes': 'Habilitations et retards', '#/journal': "Historique des actions", '#/reglages': 'Entreprise, données, sauvegardes', '#/scanner': 'Identifier un équipement', '#/planning': 'Affectations de la semaine', '#/chantiers': 'Tous les chantiers', '#/vehicules': 'Flotte, affectations, contrôles', '#/habilitations': 'Matrice électrique et nucléaire', '#/temps': 'Heures par mois, site et chantier', '#/sites': 'Paluel, Tricastin, Cruas' };
   const items = navItems().filter(([href]) => !['#/', '#/chantiers', '#/planning', '#/scanner'].includes(href));
   v.innerHTML = `<div class="head"><h1>Plus</h1><span class="muted small">${esc(S.me.name)} · ${esc(ROLE_LABEL[S.me.role])}</span></div>
   <div class="grid g2">

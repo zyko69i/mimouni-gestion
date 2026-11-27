@@ -41,7 +41,7 @@ const TASK_STATUS = ['À faire', 'En cours', 'Bloquée', 'Terminée', 'Annulée'
 const CHANTIER_STATUS = ['En préparation', 'En cours', 'Clôture proposée', 'Clôturé'];
 const ABS_TYPES = ['absence', 'retard', 'congé', 'maladie', 'non-présentation'];
 const SLOTS = ['journée', 'matin', 'après-midi'];
-const HAB_KINDS = ['Électrique (NF C 18-510)', 'CACES', 'AIPR', 'SST', 'Autre'];
+const HAB_KINDS = ['Électrique (NF C 18-510)', 'Nucléaire (RP / SC / HN)', 'CACES', 'AIPR', 'SST', 'Travail en hauteur', 'Autre'];
 const HIST_TYPES = ['intervention', 'remarque', 'photo', 'correction', 'masquage'];
 
 // ---------- Contexte de l'utilisateur et visibilité ----------
@@ -120,7 +120,7 @@ async function login(req) {
 // ---------- Données visibles (chargement initial + copie hors ligne) ----------
 async function bootstrap(user) {
   const sc = await scope(user);
-  const [tasks, absences, equipment, company] = await Promise.all([db.list('tasks'), db.list('absences'), db.list('equipment'), db.get('settings', 'company')]);
+  const [tasks, absences, equipment, company, sites, vehicles] = await Promise.all([db.list('tasks'), db.list('absences'), db.list('equipment'), db.get('settings', 'company'), db.list('sites'), db.list('vehicles')]);
   const visChantiers = sc.chantiers.filter((c) => sc.chantierIds.has(c.id));
   const visTasks = tasks.filter((t) => sc.chantierIds.has(t.chantierId));
   const visTechs = sc.technicians.filter((t) => sc.techIds.has(t.id)).map((t) => redactTech(t, user));
@@ -143,6 +143,7 @@ async function bootstrap(user) {
     chantiers: visChantiers, tasks: visTasks, technicians: visTechs, assignments: visAssign,
     // Le chef ne voit que le matériel de ses chantiers (et le matériel sans chantier)
     timesheets, absences: visAbs, equipment: user.role === 'chef' ? equipment.filter((e) => !e.chantierId || sc.chantierIds.has(e.chantierId)) : equipment, recent,
+    sites: sites.sort((a, b) => String(a.name).localeCompare(String(b.name))), vehicles,
   };
   if (user.role === 'admin') out.users = (await db.list('users')).map(publicUser);
   else out.users = (await db.list('users')).filter((u) => u.role !== 'technicien' || sc.techIds.has(u.technicianId)).map((u) => ({ login: u.login, name: u.name, role: u.role, technicianId: u.technicianId || '' }));
@@ -156,6 +157,8 @@ function techFields(b, prev = {}) {
     firstName: str(b.firstName ?? prev.firstName, 80), lastName: str(b.lastName ?? prev.lastName, 80),
     phone: str(b.phone ?? prev.phone, 40), email: str(b.email ?? prev.email, 120), address: str(b.address ?? prev.address, 250),
     position: str(b.position ?? prev.position, 80), entryDate: date(b.entryDate ?? prev.entryDate),
+    metier: str(b.metier ?? prev.metier, 60), siteId: str(b.siteId ?? prev.siteId, 20),
+    managerId: str(b.managerId ?? prev.managerId, 40),
     skills: Array.isArray(b.skills) ? b.skills.map((s) => str(s, 60)).filter(Boolean).slice(0, 30) : (prev.skills || []),
     notes: str(b.notes ?? prev.notes, 1000), active: b.active === undefined ? (prev.active ?? true) : !!b.active,
   };
@@ -205,6 +208,27 @@ async function applySheet(f, sign) {
   for (const [id, hrs] of Object.entries(byTask)) { const t = await db.get('tasks', id); if (t) { t.tsHours = r2((t.tsHours || 0) + sign * hrs); await db.put('tasks', id, t); } }
   for (const [id, hrs] of Object.entries(byCh)) { const c = await db.get('chantiers', id); if (c) { c.tsOther = r2((c.tsOther || 0) + sign * hrs); await db.put('chantiers', id, c); } }
 }
+// Agrégat d'heures par mois / site / chantier / technicien, tenu à jour à chaque validation.
+async function applyTimelog(f, sign) {
+  const month = String(f.date || '').slice(0, 7);
+  if (!month) return;
+  const tl = (await db.get('settings', 'timelog')) || { months: {} };
+  tl.months = tl.months || {};
+  const m = tl.months[month] || { total: 0, bySite: {}, byChantier: {}, byTech: {} };
+  const chantiers = await db.list('chantiers');
+  const r2 = (n) => Math.max(0, Math.round(n * 100) / 100);
+  const add = (obj, key, v) => { if (!key) return; obj[key] = r2((obj[key] || 0) + v); };
+  add(m.byTech, f.techId, sign * (f.total || 0));
+  (f.lines || []).forEach((l) => {
+    add(m.byChantier, l.chantierId, sign * l.hours);
+    const c = chantiers.find((x) => x.id === l.chantierId);
+    if (c && c.siteId) add(m.bySite, c.siteId, sign * l.hours);
+  });
+  m.total = r2((m.total || 0) + sign * (f.total || 0));
+  tl.months[month] = m; tl.updatedAt = now();
+  await db.put('settings', 'timelog', tl);
+}
+
 async function checkSheetBody(b, user, sc, techId) {
   const d = date(b.date);
   if (!d) return { err: 'La date est obligatoire.' };
@@ -249,9 +273,10 @@ async function loadDemo(user) {
 async function clearDemo(user) {
   let n = 0;
   const demoEq = new Set();
-  for (const c of ['technicians', 'chantiers', 'tasks', 'assignments', 'absences', 'equipment']) {
+  for (const c of ['sites', 'technicians', 'chantiers', 'tasks', 'assignments', 'absences', 'equipment', 'vehicles', 'timesheets']) {
     for (const it of await db.list(c)) if (it.demo) { if (c === 'equipment') demoEq.add(it.id); if (c === 'chantiers') demoEq.add('CH-' + it.id); await db.remove(c, it.id); n++; }
   }
+  const tl = await db.get('settings', 'timelog'); if (tl && tl.demo) { await db.remove('settings', 'timelog'); n++; }
   for (const k of await db.allHistoryKeys()) if (demoEq.has(k.split('/')[1])) { const e = await db.getKey(k); if (e && e.demo) { await db.deleteKey(k); n++; } }
   await log(user, 'données d\'exemple effacées', 'système', '-', n + ' éléments');
   return ok({ ok: true, removed: n });
@@ -375,7 +400,7 @@ async function route(req) {
     const sc = await scope(user);
     if (m === 'POST' && !r1) {
       if (!isAdmin) return deny();
-      const c = { id: 'C' + rid(8), name: str(body.name, 120), address: str(body.address, 250), client: str(body.client, 120), chefId: str(body.chefId, 40), start: date(body.start), endPlanned: date(body.endPlanned), status: CHANTIER_STATUS.includes(body.status) ? body.status : 'En préparation', team: Array.isArray(body.team) ? body.team.map((x) => str(x, 20)) : [], description: str(body.description, 2000), createdAt: now(), updatedAt: now() };
+      const c = { id: 'C' + rid(8), name: str(body.name, 120), siteId: str(body.siteId, 20), address: str(body.address, 250), client: str(body.client, 120), chefId: str(body.chefId, 40), start: date(body.start), endPlanned: date(body.endPlanned), status: CHANTIER_STATUS.includes(body.status) ? body.status : 'En préparation', team: Array.isArray(body.team) ? body.team.map((x) => str(x, 20)) : [], description: str(body.description, 2000), createdAt: now(), updatedAt: now() };
       if (!c.name) return bad('Le nom du chantier est obligatoire.');
       if (badOrder(c.start, c.endPlanned, 'x')) return bad('La date de fin prévue ne peut pas être avant la date de début.');
       if (sc.chantiers.some((x) => x.name.toLowerCase() === c.name.toLowerCase())) return bad('Un chantier porte déjà ce nom. Ajoutez une précision (lieu, phase…).');
@@ -388,7 +413,7 @@ async function route(req) {
       const c = await db.get('chantiers', r1); if (!c) return notFound();
       const prevStatus = c.status;
       if (isAdmin) {
-        for (const k of ['name', 'address', 'client', 'chefId', 'description']) if (body[k] !== undefined) c[k] = str(body[k], k === 'description' ? 2000 : 250);
+        for (const k of ['name', 'address', 'client', 'chefId', 'description', 'siteId']) if (body[k] !== undefined) c[k] = str(body[k], k === 'description' ? 2000 : 250);
         for (const k of ['start', 'endPlanned']) if (body[k] !== undefined) c[k] = date(body[k]);
         if (body.status && CHANTIER_STATUS.includes(body.status)) c.status = body.status;
         if (Array.isArray(body.team)) c.team = body.team.map((x) => str(x, 20));
@@ -553,7 +578,7 @@ async function route(req) {
       if (!isAdmin) return deny('Seul l\'administrateur crée les fiches matériel et leurs QR codes.');
       let id = eqCode();
       while (await db.get('equipment', id)) id = eqCode();
-      const e = { id, name: str(body.name, 150), type: str(body.type, 80), brand: str(body.brand, 80), model: str(body.model, 80), serial: str(body.serial, 80), chantierId: str(body.chantierId, 20), location: str(body.location, 200), commissioned: date(body.commissioned), specs: str(body.specs, 1000), createdAt: now(), updatedAt: now(), createdBy: user.login, labelPrints: 0 };
+      const e = { id, name: str(body.name, 150), type: str(body.type, 80), category: str(body.category, 80), brand: str(body.brand, 80), model: str(body.model, 80), serial: str(body.serial, 80), chantierId: str(body.chantierId, 20), siteId: str(body.siteId, 20), zone: str(body.zone, 120), location: str(body.location, 200), status: str(body.status, 40) || 'En service', criticality: str(body.criticality, 20) || 'Standard', commissioned: date(body.commissioned), nextControl: date(body.nextControl), specs: str(body.specs, 1000), createdAt: now(), updatedAt: now(), createdBy: user.login, labelPrints: 0 };
       if (!e.name) return bad('La désignation est obligatoire.');
       await db.put('equipment', e.id, e);
       await log(user, 'équipement créé + QR code', 'équipement', e.id, e.name);
@@ -563,8 +588,9 @@ async function route(req) {
     if (r1 && !r2 && m === 'PUT') {
       if (!isAdmin) return deny('Seul l\'administrateur modifie les informations principales.');
       const e = await db.get('equipment', r1); if (!e) return notFound();
-      for (const k of ['name', 'type', 'brand', 'model', 'serial', 'chantierId', 'location', 'specs']) if (body[k] !== undefined) e[k] = str(body[k], k === 'specs' ? 1000 : 200);
+      for (const k of ['name', 'type', 'category', 'brand', 'model', 'serial', 'chantierId', 'siteId', 'zone', 'location', 'status', 'criticality', 'specs']) if (body[k] !== undefined) e[k] = str(body[k], k === 'specs' ? 1000 : 200);
       if (body.commissioned !== undefined) e.commissioned = date(body.commissioned);
+      if (body.nextControl !== undefined) e.nextControl = date(body.nextControl);
       e.updatedAt = now();
       await db.put('equipment', e.id, e);
       await log(user, 'équipement modifié', 'équipement', e.id);
@@ -615,6 +641,73 @@ async function route(req) {
 
   if (r0 === 'history' && m === 'DELETE') return deny('L\'historique ne peut pas être supprimé.');
 
+  // ----- Sites (Paluel, Tricastin, Cruas…) -----
+  if (r0 === 'sites') {
+    if (m === 'GET' && !r1) return ok(await db.list('sites'));
+    if (m === 'POST' && !r1) {
+      if (!isAdmin) return deny();
+      const site = { id: 'S' + rid(6), name: str(body.name, 80), code: str(body.code, 12), address: str(body.address, 200), type: str(body.type, 40) || 'Centrale nucléaire', manager: str(body.manager, 80), notes: str(body.notes, 500), createdAt: now() };
+      if (!site.name) return bad('Le nom du site est obligatoire.');
+      await db.put('sites', site.id, site);
+      await log(user, 'site créé', 'site', site.id, site.name);
+      return ok(site);
+    }
+    if (m === 'PUT' && r1) {
+      if (!isAdmin) return deny();
+      const site = await db.get('sites', r1); if (!site) return notFound();
+      for (const k of ['name', 'code', 'address', 'type', 'manager']) if (body[k] !== undefined) site[k] = str(body[k], 200);
+      if (body.notes !== undefined) site.notes = str(body.notes, 500);
+      await db.put('sites', site.id, site);
+      await log(user, 'site modifié', 'site', site.id, site.name);
+      return ok(site);
+    }
+    return deny();
+  }
+
+  // ----- Parc véhicules -----
+  if (r0 === 'vehicles') {
+    const VEH_STATUS = ['Disponible', 'Affecté', 'Atelier', 'Hors service'];
+    const VEH_TYPES = ['Fourgon', 'Camionnette', 'Voiture', 'Utilitaire', 'Camion nacelle', 'Pick-up'];
+    if (m === 'GET' && !r1) return ok(await db.list('vehicles'));
+    if (m === 'POST' && !r1) {
+      if (!isAdmin && user.role !== 'chef') return deny();
+      const v = {
+        id: 'V' + rid(6), plate: str(body.plate, 20).toUpperCase(), brand: str(body.brand, 40), model: str(body.model, 60),
+        type: VEH_TYPES.includes(body.type) ? body.type : 'Fourgon', siteId: str(body.siteId, 20), assignedTo: str(body.assignedTo, 20),
+        km: num(body.km), status: VEH_STATUS.includes(body.status) ? body.status : 'Disponible',
+        ct: date(body.ct), insurance: date(body.insurance), nextService: date(body.nextService), nextServiceKm: num(body.nextServiceKm),
+        fuel: str(body.fuel, 20) || 'Diesel', notes: str(body.notes, 500), createdAt: now(), updatedAt: now(), createdBy: user.login,
+      };
+      if (!v.plate) return bad('L\'immatriculation est obligatoire.');
+      if ((await db.list('vehicles')).some((x) => x.plate === v.plate)) return bad('Un véhicule porte déjà cette immatriculation.');
+      await db.put('vehicles', v.id, v);
+      await log(user, 'véhicule créé', 'véhicule', v.id, v.plate);
+      return ok(v);
+    }
+    if (m === 'PUT' && r1) {
+      if (!isAdmin && user.role !== 'chef') return deny();
+      const v = await db.get('vehicles', r1); if (!v) return notFound();
+      for (const k of ['plate', 'brand', 'model', 'siteId', 'assignedTo', 'fuel', 'notes']) if (body[k] !== undefined) v[k] = str(body[k], k === 'notes' ? 500 : 60);
+      if (body.plate !== undefined) v.plate = str(body.plate, 20).toUpperCase();
+      for (const k of ['ct', 'insurance', 'nextService']) if (body[k] !== undefined) v[k] = date(body[k]);
+      for (const k of ['km', 'nextServiceKm']) if (body[k] !== undefined) v[k] = num(body[k]);
+      if (body.type && VEH_TYPES.includes(body.type)) v.type = body.type;
+      if (body.status && VEH_STATUS.includes(body.status)) v.status = body.status;
+      v.updatedAt = now();
+      await db.put('vehicles', v.id, v);
+      await log(user, 'véhicule modifié', 'véhicule', v.id, v.plate);
+      return ok(v);
+    }
+    if (m === 'DELETE' && r1) {
+      if (!isAdmin) return deny();
+      const v = await db.get('vehicles', r1); if (!v) return notFound();
+      await db.remove('vehicles', v.id);
+      await log(user, 'véhicule retiré', 'véhicule', v.id, v.plate);
+      return ok({ ok: true });
+    }
+    return deny();
+  }
+
   // ----- Photos -----
   if (r0 === 'photos' && r1 && m === 'GET') {
     const p = await db.getPhoto(r1);
@@ -637,7 +730,7 @@ async function route(req) {
       const clientId = str(body.clientId, 40);
       if (prev && clientId && prev.clientId === clientId) return ok({ ...prev, duplicate: true });
       if (prev && prev.status === 'Validée' && !isAdmin) return bad('La feuille du ' + chk.d.split('-').reverse().join('/') + ' est déjà validée : demandez une correction à l\'administrateur.');
-      if (prev && prev.status === 'Validée') await applySheet(prev, -1);
+      if (prev && prev.status === 'Validée') { await applySheet(prev, -1); await applyTimelog(prev, -1); }
       const f = {
         id, techId, date: chk.d, lines: chk.lines, total: chk.total, comment: str(body.comment, 500), warnings: chk.warnings,
         status: 'Envoyée', refuseReason: '', submittedBy: user.login, submittedAt: now(), clientId, offline: !!body.offline,
@@ -658,8 +751,8 @@ async function route(req) {
       if (decision === f.status) return bad('Cette feuille est déjà ' + decision.toLowerCase() + '.');
       const reason = str(body.reason, 500);
       if (decision === 'Refusée' && reason.length < 3) return bad('Indiquez le motif du refus.');
-      if (f.status === 'Validée') await applySheet(f, -1);
-      if (decision === 'Validée') await applySheet(f, +1);
+      if (f.status === 'Validée') { await applySheet(f, -1); await applyTimelog(f, -1); }
+      if (decision === 'Validée') { await applySheet(f, +1); await applyTimelog(f, +1); }
       f.history = [...(f.history || []), { at: now(), by: user.login, action: decision, reason, previous: { status: f.status } }].slice(-30);
       f.status = decision; f.refuseReason = decision === 'Refusée' ? reason : ''; f.decidedBy = user.login; f.decidedAt = now(); f.updatedAt = now();
       await db.put('timesheets', f.id, f);
@@ -687,7 +780,37 @@ async function route(req) {
     return deny();
   }
 
+  // ----- Statistiques d'heures (agrégat mensuel) -----
+  if (r0 === 'stats' && r1 === 'hours') {
+    if (user.role === 'technicien') return deny();
+    if (m === 'GET') {
+      const tl = (await db.get('settings', 'timelog')) || { months: {}, updatedAt: '' };
+      return ok(tl);
+    }
+    if (m === 'POST' && r2 === 'rebuild') {
+      if (!isAdmin) return deny();
+      const months = {};
+      const chantiers = await db.list('chantiers');
+      const r2n = (n) => Math.max(0, Math.round(n * 100) / 100);
+      for (const f of await db.list('timesheets')) {
+        if (f.status !== 'Validée') continue;
+        const month = String(f.date || '').slice(0, 7); if (!month) continue;
+        const m2 = months[month] || { total: 0, bySite: {}, byChantier: {}, byTech: {} };
+        const add = (o, k, v) => { if (k) o[k] = r2n((o[k] || 0) + v); };
+        add(m2.byTech, f.techId, f.total || 0);
+        for (const l of f.lines || []) { add(m2.byChantier, l.chantierId, l.hours); const c = chantiers.find((x) => x.id === l.chantierId); if (c && c.siteId) add(m2.bySite, c.siteId, l.hours); }
+        m2.total = r2n((m2.total || 0) + (f.total || 0));
+        months[month] = m2;
+      }
+      await db.put('settings', 'timelog', { months, updatedAt: now() });
+      await log(user, 'heures recalculées', 'statistiques', 'timelog', Object.keys(months).length + ' mois');
+      return ok({ months, updatedAt: now() });
+    }
+    return deny();
+  }
+
   // ----- Journal, sauvegardes, export (admin) -----
+
   if (r0 === 'journal') { if (!isAdmin || m !== 'GET') return deny(); return ok(await db.listJournal(300)); }
   if (r0 === 'backups') {
     if (!isAdmin) return deny();
