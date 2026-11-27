@@ -817,66 +817,88 @@ async function bindPhotos(root) {
 const PL = { mode: 'week', anchor: todayISO() };
 function weekStart(s) { const d = parseD(s); const w = (d.getDay() + 6) % 7; d.setDate(d.getDate() - w); return iso(d); }
 ROUTES.planning = async (v) => {
-  let days;
-  if (PL.mode === 'day') days = [PL.anchor];
-  else if (PL.mode === 'week') { const s = weekStart(PL.anchor); days = Array.from({ length: 7 }, (_, i) => addDays(s, i)); }
-  else { const d = parseD(PL.anchor); const first = iso(new Date(d.getFullYear(), d.getMonth(), 1)); const n = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate(); days = Array.from({ length: n }, (_, i) => addDays(first, i)); }
-  let techs = D().technicians.filter((t) => t.active !== false);
-  if (isTech()) techs = techs.filter((t) => t.id === S.me.technicianId);
-  const canEdit = !isTech();
-  const title = PL.mode === 'day' ? parseD(PL.anchor).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
-    : PL.mode === 'week' ? `Semaine du ${fmtD(days[0])} au ${fmtD(days[6])}` : parseD(PL.anchor).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
-  const cell = (t, day) => {
-    const as = D().assignments.filter((a) => a.techId === t.id && a.date === day);
-    const ab = absentOn(t.id, day);
-    const conf = as.some((a) => assignConflicts(a).length);
-    const we = !isWorkDay(day);
-    if (PL.mode === 'month') return `<td class="${we ? 'we' : ''} ${conf ? 'conflict' : ''}" title="${esc(as.map((a) => (chantierById(a.chantierId)?.name || 'Autre chantier') + ' (' + a.slot + ')').join(', '))}">${as.length ? `<b>${as.length}</b>` : ''}${ab ? '<span class="chip abs" style="padding:0 2px">A</span>' : ''}</td>`;
-    return `<td class="${we ? 'we' : ''} ${conf ? 'conflict' : ''}">${ab ? `<span class="chip abs">${esc(absLabel(ab))}</span>` : ''}${as.map((a) => { const c = chantierById(a.chantierId); const bad = assignConflicts(a).length; return `<span class="chip ${a.other ? 'other' : ''} ${bad ? 'bad' : ''}" data-as="${a.id}" title="${esc(assignConflicts(a).join(' · '))}">${esc(c ? c.name : 'Autre chantier')} · ${esc(a.slot)}${bad ? ' ⚠' : ''}</span>`; }).join('')}</td>`;
+  const d = D();
+  const today = todayISO();
+  const weekS = weekStart(today);
+  const weekE = addDays(weekS, 6);
+  const todayAssigns = d.assignments.filter(a => a.date === today);
+  const weekAssigns = d.assignments.filter(a => a.date >= weekS && a.date <= weekE);
+  const late = d.assignments.filter(a => a.date < today && a.status !== 'Terminé');
+  const techs = d.technicians.filter(t => t.active !== false);
+  const available = techs.filter(t => !absentOn(t.id, today)).length;
+  v.innerHTML = `<div class="head"><h1>Planning</h1><button class="btn primary" id="new-inter">+ Ajouter une intervention</button></div>
+  <div class="grid g4" style="margin-bottom:1rem">
+    ${kpi(todayAssigns.length, "Aujourd'hui")}
+    ${kpi(weekAssigns.length, 'Cette semaine')}
+    ${kpi(available + '/' + techs.length, 'Disponibles')}
+    ${kpi(late.length, 'En retard', late.length ? 'red' : 'ok')}
+  </div>
+  <div class="card">
+    <div class="row" style="justify-content:space-between;margin-bottom:0.75rem">
+      <div class="row">${['day','week','month'].map(m => `<button class="btn sm ${PL.mode===m?'dark':''}" data-mode="${m}">${{day:'Jour',week:'Semaine',month:'Mois'}[m]}</button>`).join('')}</div>
+      <div class="row"><button class="btn sm" data-nav="-1">‹</button><b id="pl-title"></b><button class="btn sm" data-nav="1">›</button><button class="btn sm" data-today>Aujourd'hui</button></div>
+    </div>
+    <div id="pl-cal"></div>
+  </div>
+  <div class="card"><h3>Statistiques</h3><div id="pl-stats" class="muted small">Chargement…</div></div>`;
+  const renderCal = () => {
+    let days;
+    if (PL.mode === 'day') days = [PL.anchor];
+    else if (PL.mode === 'week') { const s = weekStart(PL.anchor); days = Array.from({length:7}, (_,i) => addDays(s, i)); }
+    else { const dt = parseD(PL.anchor); const first = iso(new Date(dt.getFullYear(), dt.getMonth(), 1)); const n = new Date(dt.getFullYear(), dt.getMonth()+1, 0).getDate(); days = Array.from({length:n}, (_,i) => addDays(first, i)); }
+    const title = PL.mode === 'day' ? parseD(PL.anchor).toLocaleDateString('fr-FR', {weekday:'long', day:'numeric', month:'long'}) : PL.mode === 'week' ? `Semaine du ${fmtD(days[0])} au ${fmtD(days[6])}` : parseD(PL.anchor).toLocaleDateString('fr-FR', {month:'long', year:'numeric'});
+    document.getElementById('pl-title').textContent = title;
+    const assigns = d.assignments.filter(a => days.includes(a.date));
+    let html = '<div style="display:grid;gap:0.5rem">';
+    days.forEach(day => {
+      const dayAs = assigns.filter(a => a.date === day);
+      const we = !isWorkDay(day);
+      html += `<div style="border:1px solid #E5E7EB;border-radius:10px;padding:0.6rem;background:${we?'#F9FAFB':'#fff'}"><b>${parseD(day).toLocaleDateString('fr-FR', {weekday:'short', day:'2-digit', month:'2-digit'})}</b>`;
+      if (!dayAs.length) html += '<p class="muted small" style="margin:0.3rem 0">Aucune intervention</p>';
+      else dayAs.forEach(a => {
+        const tech = techs.find(t => t.id === a.techId);
+        const ch = chantierById(a.chantierId);
+        const color = a.status === 'Terminé' ? '#16A34A' : a.status === 'En attente' ? '#F59E0B' : '#2563EB';
+        html += `<div style="margin:0.3rem 0;padding:0.4rem 0.6rem;border-left:3px solid ${color};background:#F8FAFC;border-radius:6px;font-size:0.85rem">${esc(ch?.name || 'Intervention')} · ${esc(tech ? tech.firstName + ' ' + tech.lastName : '')} · ${esc(a.slot || '')}</div>`;
+      });
+      html += '</div>';
+    });
+    html += '</div>';
+    document.getElementById('pl-cal').innerHTML = html;
+    const stats = `Interventions cette semaine : ${weekAssigns.length}. Terminées : ${weekAssigns.filter(a => a.status === 'Terminé').length}.`;
+    document.getElementById('pl-stats').textContent = stats;
   };
-  const conflicts = allConflicts().filter((x) => days.includes(x.a.date));
-  v.innerHTML = `<div class="head"><h1>Planning</h1>${canEdit ? '<button class="btn primary" id="new-as">+ Affecter</button>' : ''}</div>
-  <div class="card"><div class="row" style="justify-content:space-between">
-    <div class="row">${['day', 'week', 'month'].map((m) => `<button class="btn sm ${PL.mode === m ? 'dark' : ''}" data-mode="${m}">${{ day: 'Jour', week: 'Semaine', month: 'Mois' }[m]}</button>`).join('')}</div>
-    <div class="row"><button class="btn sm" data-nav-d="-1">‹</button><b>${esc(title)}</b><button class="btn sm" data-nav-d="1">›</button><button class="btn sm" data-today>Aujourd'hui</button></div></div>
-    ${conflicts.length ? `<p class="err small" id="conflict-list">⚠ ${conflicts.length} conflit(s) : ${conflicts.map((x) => esc(techName(x.a.techId) + ' le ' + fmtD(x.a.date) + ' – ' + x.c.join(', '))).join(' · ')}</p>` : '<p class="muted small">Aucun conflit sur la période.</p>'}
-    <div class="table-wrap"><table class="plan ${PL.mode === 'month' ? 'month' : ''}"><thead><tr><th class="tech">Technicien</th>${days.map((d) => `<th data-d="${d}" class="${!isWorkDay(d) ? 'we' : ''}">${PL.mode === 'month' ? parseD(d).getDate() : parseD(d).toLocaleDateString('fr-FR', { weekday: 'short', day: '2-digit', month: '2-digit' })}</th>`).join('')}</tr></thead>
-    <tbody>${techs.map((t) => `<tr><td class="tech" style="cursor:pointer" data-tech="${t.id}"><b>${esc(t.firstName + ' ' + t.lastName)}</b>${demoTag(t)}${canEdit ? ` <button class="btn sm" style="margin-top:4px;padding:2px 8px;font-size:0.7rem" data-assign="${t.id}">+ Affecter</button>` : ''}</td>${days.map((d) => cell(t, d)).join('')}</tr>`).join('') || `<tr><td class="muted" colspan="${days.length + 1}">Aucun technicien.</td></tr>`}</tbody></table></div>
-    <p class="muted small">Rouge = conflit (double affectation, absence ou habilitation expirée). ${canEdit ? 'Touchez une affectation pour la retirer.' : ''}</p></div>`;
-  // Sur téléphone, la semaine ne tient pas en largeur : on fait défiler jusqu'au jour d'aujourd'hui
-  { const wrap = $('.table-wrap', v); const target = days.includes(todayISO()) ? todayISO() : PL.anchor; const th = wrap && wrap.querySelector(`th[data-d="${target}"]`);
-    if (wrap && th && wrap.scrollWidth > wrap.clientWidth) { const first = wrap.querySelector('th.tech'); wrap.scrollLeft = Math.max(0, th.offsetLeft - (first ? first.offsetWidth : 0)); } }
-  $$('[data-mode]', v).forEach((b) => (b.onclick = () => { PL.mode = b.dataset.mode; render(); }));
-  $$('[data-nav-d]', v).forEach((b) => (b.onclick = () => { const k = Number(b.dataset.navD); if (PL.mode === 'day') PL.anchor = addDays(PL.anchor, k); else if (PL.mode === 'week') PL.anchor = addDays(PL.anchor, 7 * k); else { const d = parseD(PL.anchor); PL.anchor = iso(new Date(d.getFullYear(), d.getMonth() + k, 1)); } render(); }));
+  renderCal();
+  $$('[data-mode]', v).forEach(b => b.onclick = () => { PL.mode = b.dataset.mode; render(); });
+  $$('[data-nav]', v).forEach(b => b.onclick = () => {
+    const k = Number(b.dataset.nav);
+    if (PL.mode === 'day') PL.anchor = addDays(PL.anchor, k);
+    else if (PL.mode === 'week') PL.anchor = addDays(PL.anchor, 7*k);
+    else { const dt = parseD(PL.anchor); PL.anchor = iso(new Date(dt.getFullYear(), dt.getMonth()+k, 1)); }
+    render();
+  });
   $('[data-today]', v).onclick = () => { PL.anchor = todayISO(); render(); };
-  if (canEdit) {
-    $('#new-as', v).onclick = () => assignForm();
-    $$('[data-assign]', v).forEach((b) => (b.onclick = (e) => { e.preventDefault(); e.stopPropagation(); assignForm(b.dataset.assign); }));
-    $$('[data-as]', v).forEach((el) => (el.onclick = async () => { const a = D().assignments.find((x) => x.id === el.dataset.as); if (!a || a.other) return; if (await confirmBox(`Retirer l'affectation de ${esc(techName(a.techId))} le ${fmtD(a.date)} ?`, 'Retirer')) { await api('DELETE', 'assignments/' + a.id); toast('Affectation retirée'); refresh(); } }));
-  }
-  $$('[data-tech]', v).forEach((td) => (td.onclick = (e) => { if (e.target.closest('[data-assign]')) return; location.hash = '#/technicien/' + td.dataset.tech; }));
+  document.getElementById('new-inter').onclick = () => openInterventionForm();
 };
-function assignForm(preTech = null) {
-  const ch = D().chantiers.filter((c) => c.status !== 'Clôturé');
-  formModal({ title: 'Affecter un technicien', fields: [
-    { name: 'techId', label: 'Technicien', type: 'select', required: true, options: D().technicians.filter((t) => t.active !== false).map((t) => [t.id, t.firstName + ' ' + t.lastName]), value: preTech },
-    { name: 'chantierId', label: 'Chantier', type: 'select', required: true, options: ch.map((c) => [c.id, c.name]) },
-    { name: 'date', label: 'Date', type: 'date', required: true, value: PL.anchor },
-    { name: 'slot', label: 'Créneau', type: 'select', options: ['journée', 'matin', 'après-midi'] },
-    { name: 'note', label: 'Remarque' },
-  ], submitLabel: 'Affecter', onSubmit: async (vals) => {
-    const r = await api('POST', 'assignments', vals);
-    if (r.conflicts && r.conflicts.length) toast('⚠ Affecté, mais conflit : ' + r.conflicts.map((c) => c.message).join(' · '), 6000); else toast('Affectation enregistrée');
-    PL.anchor = vals.date; refresh();
-  } });
-}
-
-// ---------------- Techniciens ----------------
-function habTable(t, all = false) {
-  const list = all ? (t.habilitations || []).slice().sort((a, b) => (b.expires || '').localeCompare(a.expires || '')) : currentHabs(t);
-  if (!list.length) return '<p class="muted">Aucune habilitation enregistrée.</p>';
-  const cur = new Set(currentHabs(t).map((x) => x.id));
-  return `<div class="table-wrap"><table><thead><tr><th>Type</th><th>Symbole</th><th>Délivrée</th><th>Fin de validité</th><th>État</th></tr></thead><tbody>${list.map((hb) => { const st = habStatus(hb); return `<tr class="click" data-hab="${hb.id}" style="${cur.has(hb.id) ? '' : 'opacity:.55'};cursor:pointer"><td>${esc(hb.kind)}</td><td><b>${esc(hb.symbol)}</b></td><td>${fmtD(hb.issued)}</td><td>${fmtD(hb.expires)}</td><td>${cur.has(hb.id) ? `<span class="pill ${st.cls}">${esc(st.label)}</span>` : '<span class="pill">Remplacée (historique)</span>'}</td></tr>`; }).join('')}</tbody></table></div>`;
+function openInterventionForm() {
+  const techs = D().technicians.filter(t => t.active !== false);
+  const chs = D().chantiers;
+  const m = modal(`<div class="head"><h2>Nouvelle intervention</h2><button class="btn" data-close>×</button></div>
+    <form id="inter-form">
+      <label>Nom<input name="name" required></label>
+      <label>Chantier / Client<select name="chantierId"><option value="">—</option>${chs.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('')}</select></label>
+      <label>Date<input type="date" name="date" value="${todayISO()}" required></label>
+      <label>Créneau<input name="slot" placeholder="ex: 08:00-12:00"></label>
+      <label>Technicien<select name="techId">${techs.map(t => `<option value="${t.id}">${esc(t.firstName + ' ' + t.lastName)}</option>`).join('')}</select></label>
+      <label>Statut<select name="status"><option>Planifié</option><option>En attente</option><option>Terminé</option></select></label>
+      <div class="actions"><button type="button" class="btn" data-close>Annuler</button><button class="btn primary" type="submit">Enregistrer</button></div>
+    </form>`, { close: true });
+  document.getElementById('inter-form').onsubmit = async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    await api('POST', 'assignments', { techId: fd.get('techId'), chantierId: fd.get('chantierId') || null, date: fd.get('date'), slot: fd.get('slot') || '', status: fd.get('status'), name: fd.get('name') });
+    m.remove(); await loadData(); render();
+  };
 }
 ROUTES.techniciens = async (v) => {
   if (isTech()) { location.hash = '#/technicien/' + S.me.technicianId; return; }
