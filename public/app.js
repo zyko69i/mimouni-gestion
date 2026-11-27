@@ -777,7 +777,9 @@ ROUTES.home = async (v) => {
   const toValidate = (d.timesheets || []).filter((f) => f.status === 'Envoyée' && canDecideLocal(f));
   const hr = new Date().getHours();
   const greet = hr < 12 ? 'Bonjour' : hr < 18 ? 'Bon après-midi' : 'Bonsoir';
-  const firstName = String(S.me.name || '').replace(/^(M\.|Mme|Monsieur|Madame)\s+/i, '').split(/\s+/)[0] || '';
+  const rawName = String(S.me.name || '');
+  const civ = (rawName.match(/^(M\.|Mme|Monsieur|Madame)\s+/i) || [''])[0];
+  const firstName = civ + (rawName.replace(/^(M\.|Mme|Monsieur|Madame)\s+/i, '').split(/\s+/)[0] || '');
   const attention = pendingTasks.length + habs.length + blocked.length + late.length;
   const heroStats = `
     <div class="hero-stats">
