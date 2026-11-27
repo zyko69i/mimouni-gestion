@@ -562,7 +562,21 @@ document.addEventListener('DOMContentLoaded', start);
 const kpi = (v, l, cls = '', href = '') => `<a class="kpi ${cls}" ${href ? `href="${href}"` : ''} style="text-decoration:none;color:inherit;display:block;cursor:pointer"><div class="v">${v}</div><div class="l">${esc(l)}</div></a>`;
 const statusPill = (s) => `<span class="pill ${s === 'Terminée' || s === 'Clôturé' ? 'green' : s === 'Bloquée' ? 'red' : s === 'En cours' ? 'dark' : s === 'Annulée' ? '' : s === 'Clôture proposée' ? 'orange' : ''}">${esc(s)}</span>`;
 
-function presentToday() {
+function seniority(entryDate) {
+  if (!entryDate) return '';
+  const start = parseD(entryDate);
+  const now = new Date();
+  let years = now.getFullYear() - start.getFullYear();
+  let months = now.getMonth() - start.getMonth();
+  if (months < 0) { years--; months += 12; }
+  if (now.getDate() < start.getDate()) months--;
+  if (months < 0) { years--; months += 12; }
+  if (years > 0 && months > 0) return `${years} an${years > 1 ? 's' : ''} ${months} mois`;
+  if (years > 0) return `${years} an${years > 1 ? 's' : ''}`;
+  if (months > 0) return `${months} mois`;
+  const days = Math.floor((now - start) / 86400000);
+  return days <= 0 ? 'Aujourd\'hui' : `${days} jour${days > 1 ? 's' : ''}`;
+}
   const day = todayISO();
   const techs = D().technicians.filter((t) => t.active !== false);
   const assignedIds = new Set(D().assignments.filter((a) => a.date === day).map((a) => a.techId));
@@ -873,7 +887,7 @@ ROUTES.technicien = async (v, id) => {
       <h2 style="margin:0">${esc(t.firstName + ' ' + t.lastName)}</h2>
       <p class="muted">${esc(t.position || 'Technicien')}</p>
     </div>
-    <div class="card"><h2>Coordonnées</h2><table><tr><th>Poste</th><td>${esc(t.position || '–')}</td></tr><tr><th>Téléphone</th><td>${esc(t.phone || '–')}</td></tr><tr><th>Email</th><td>${esc(t.email || '–')}</td></tr>${t.address !== undefined ? `<tr><th>Adresse</th><td>${esc(t.address || '–')}</td></tr>` : ''}<tr><th>Entrée</th><td>${fmtD(t.entryDate)}</td></tr><tr><th>Compétences</th><td>${(t.skills || []).map((s) => `<span class="pill">${esc(s)}</span>`).join(' ') || '–'}</td></tr></table></div>
+    <div class="card"><h2>Coordonnées</h2><table><tr><th>Poste</th><td>${esc(t.position || '–')}</td></tr><tr><th>Téléphone</th><td>${esc(t.phone || '–')}</td></tr><tr><th>Email</th><td>${esc(t.email || '–')}</td></tr>${t.address !== undefined ? `<tr><th>Adresse</th><td>${esc(t.address || '–')}</td></tr>` : ''}<tr><th>Entrée</th><td>${fmtD(t.entryDate)}${t.entryDate ? ` <span class="pill">${seniority(t.entryDate)}</span>` : ''}</td></tr><tr><th>Compétences</th><td>${(t.skills || []).map((s) => `<span class="pill">${esc(s)}</span>`).join(' ') || '–'}</td></tr></table></div>
     <div class="card"><h2>Habilitations ${isAdmin() ? `<button class="btn sm" id="add-hab-icon" style="float:right;padding:4px 10px" title="Ajouter une habilitation">${ICON.list || '+'} Ajouter</button>` : ''}</h2>${habTable(t, true)}<p class="muted small">Alertes : orange à 60 jours, rouge à 30 jours, puis « Expirée ». Un renouvellement ajoute une ligne, l'ancienne reste en historique.</p></div>
     <div class="card"><h2>Prochaines affectations ${!isTech() ? `<button class="btn sm" id="add-as-icon" style="float:right;padding:4px 10px" title="Affecter">${ICON.cal || '+'} Affecter</button>` : ''}</h2>${as.map((a) => `<a class="list" href="#/chantier/${a.chantierId}" style="text-decoration:none;color:inherit"><div class="item"><span>${fmtD(a.date)} · ${esc(a.slot)}</span><span>${esc(chantierById(a.chantierId)?.name || 'Autre chantier')}</span></div></a>`).join('') || '<p class="muted">Aucune.</p>'}</div>
     <div class="card"><h2>Présences et absences ${isAdmin() || isChef() ? `<button class="btn sm" id="add-abs-icon" style="float:right;padding:4px 10px" title="Signaler une absence">${ICON.abs || '+'} Signaler</button>` : ''}</h2>${abs.map((a) => `<div class="list click" data-abs="${a.id}" style="cursor:pointer"><div class="item"><span>${esc(absLabel(a))} · ${fmtD(a.start)}${a.end && a.end !== a.start ? ' → ' + fmtD(a.end) : ''}</span><span class="pill">${esc(a.status)}</span></div></div>`).join('') || '<p class="muted">Aucune absence.</p>'}</div>
