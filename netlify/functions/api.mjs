@@ -4,6 +4,7 @@ import { randomBytes } from 'node:crypto';
 import * as db from '../lib/db.mjs';
 import { hashPassword, verifyPassword, signToken, readToken } from '../lib/auth.mjs';
 import { DEMO } from '../lib/demo.mjs';
+import { handleRegistre } from '../lib/registres.mjs';
 
 const COMPANY = 'MIMOUNI INDUSTRIEL ÉLECTRICITÉ';
 const H = { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' };
@@ -1083,6 +1084,9 @@ async function route(req) {
     return deny();
   }
 
+  // ----- Registres : carburant, entretien, barèmes, déplacements, stocks -----
+  if (r0 === 'reg') return handleRegistre({ user, m, r1, r2, body, log });
+
   // ----- Réglages entreprise -----
   if (r0 === 'settings' && r1 === 'company') {
     if (m === 'GET') return ok((await db.get('settings', 'company')) || { name: COMPANY });
@@ -1152,6 +1156,7 @@ async function route(req) {
       //    (exception : le compte administrateur principal actuel est conservé pour ne jamais perdre l'accès)
       let written = 0, removed = 0;
       for (const c of db.COLLECTIONS) {
+        if (!Array.isArray(b.data[c]) && c !== 'users' && c !== 'settings') continue; // ancienne sauvegarde sans cette collection : on n'y touche pas
         const items = b.data[c] || [];
         const idOf = (it) => (c === 'users' ? it.login : (c === 'settings' ? 'company' : it.id));
         const keep = new Set(items.map(idOf).filter(Boolean));
