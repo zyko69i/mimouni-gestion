@@ -609,12 +609,17 @@ function navGroups() {
   if (r === 'admin') {
     groups.push({ label: 'Administration', items: [
       ['#/sites', 'globe', 'Sites'],
+      ['#/etiquettes', 'scan', 'Étiquettes QR'],
+      ['#/partages', 'send', 'Délégations'],
+      ['#/rgpd', 'shield', 'RGPD & DPO'],
       ['#/rapports', 'doc', 'Rapports'],
+      ['#/preuves', 'shield', 'Preuves & traçabilité'],
       ['#/journal', 'list', 'Journal'],
+      ['#/stockage', 'activity', 'Stockage & synchro'],
       ['#/reglages', 'gear', 'Réglages'],
     ] });
   } else if (r === 'chef') {
-    groups.push({ label: 'Administration', items: [['#/rapports', 'doc', 'Rapports']] });
+    groups.push({ label: 'Administration', items: [['#/partages', 'send', 'Délégations'], ['#/rapports', 'doc', 'Rapports']] });
   }
   return groups;
 }
@@ -786,7 +791,7 @@ async function render() {
   const map = { chantier: 'chantiers', technicien: 'techniciens', equipement: 'materiel', plus: 'plus' };
   const activeKey = map[key] || key;
   $$('[data-nav]').forEach((a) => { const n = a.dataset.nav.split('/')[1] || 'home'; a.classList.toggle('active', n === activeKey); });
-  const PAGE_LABEL = { home: isTech() ? 'Mon activité' : 'Tableau de bord', chantiers: 'Chantiers', chantier: 'Chantier', planning: 'Planning', pointage: 'Pointage des heures', techniciens: 'Techniciens', technicien: 'Fiche technicien', absences: 'Présences & absences', materiel: 'Matériel', equipement: 'Équipement', scanner: 'Scanner', rapports: 'Rapports', alertes: 'Alertes', journal: "Journal d'activité", reglages: 'Réglages', profil: 'Mon profil', plus: 'Plus', envois: 'Envois refusés', vehicules: 'Parc véhicules', habilitations: 'Habilitations', temps: 'Temps & production', sites: 'Sites', documents: 'Bibliothèque documentaire', courriers: 'Courriers', maintenance: 'Maintenance', rentabilite: 'Rentabilité', couts: 'Coûts chantier', assistant: 'Assistant', caces: 'CACES', dict: 'DICT / DT', consignation: 'Consignation', dosimetrie: 'Dosimétrie', soustraitants: 'Sous-traitants', recompenses: 'Récompenses', evolution: 'Évolution professionnelle', signatures: 'Signatures', carburant: 'Carburant', entretien: 'Entretien véhicules', deplacements: 'Déplacements & frais', stocks: 'Stocks', baremes: 'Barèmes' };
+  const PAGE_LABEL = { home: isTech() ? 'Mon activité' : 'Tableau de bord', chantiers: 'Chantiers', chantier: 'Chantier', planning: 'Planning', pointage: 'Pointage des heures', techniciens: 'Techniciens', technicien: 'Fiche technicien', absences: 'Présences & absences', materiel: 'Matériel', equipement: 'Équipement', scanner: 'Scanner', rapports: 'Rapports', alertes: 'Alertes', journal: "Journal d'activité", reglages: 'Réglages', profil: 'Mon profil', plus: 'Plus', envois: 'Envois refusés', vehicules: 'Parc véhicules', habilitations: 'Habilitations', temps: 'Temps & production', sites: 'Sites', documents: 'Bibliothèque documentaire', courriers: 'Courriers', maintenance: 'Maintenance', rentabilite: 'Rentabilité', couts: 'Coûts chantier', assistant: 'Assistant', caces: 'CACES', dict: 'DICT / DT', consignation: 'Consignation', dosimetrie: 'Dosimétrie', soustraitants: 'Sous-traitants', recompenses: 'Récompenses', evolution: 'Évolution professionnelle', signatures: 'Signatures', carburant: 'Carburant', entretien: 'Entretien véhicules', deplacements: 'Déplacements & frais', stocks: 'Stocks', baremes: 'Barèmes', rgpd: 'RGPD & DPO', partages: 'Délégation d\'accès', stockage: 'Stockage et synchronisation', etiquettes: 'Étiquettes QR', preuves: 'Preuves et traçabilité' };
   const label = PAGE_LABEL[key] || 'Gestion';
   const elPage = $('#tb-page'); if (elPage) elPage.textContent = label;
   const elCrumb = $('#tb-crumb-page'); if (elCrumb) elCrumb.textContent = label;
@@ -809,6 +814,7 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
 
 // ---------------- démarrage ----------------
 async function start() {
+  if (await tryPublicShare()) return;
   await queueRefresh().catch(() => {});
   await rejectedLoad().catch(() => {});
   const m = location.pathname.match(/^\/e\/([A-Za-z0-9-]+)/);
@@ -1289,7 +1295,7 @@ async function bindPhotos(root) {
 }
 
 // ---------------- Planning ----------------
-const PL = { mode: 'week', anchor: todayISO(), site: 'all', tempsYear: 0, habHorizon: 60, habKind: '', vehQ: '', vehStatus: '', eqCat: '', techMetier: '', docQ: '', docCat: '', docStatut: '', flowDir: 'Envoi', maintTab: 'plan' };
+const PL = { mode: 'week', anchor: todayISO(), site: 'all', tempsYear: 0, habHorizon: 60, habKind: '', vehQ: '', vehStatus: '', eqCat: '', techMetier: '', docQ: '', docCat: '', docStatut: '', docTag: '', flowDir: 'Envoi', maintTab: 'plan' };
 function weekStart(s) { const d = parseD(s); const w = (d.getDay() + 6) % 7; d.setDate(d.getDate() - w); return iso(d); }
 ROUTES.planning = async (v) => {
   const d = D();
@@ -1582,7 +1588,7 @@ ROUTES.materiel = async (v) => {
   const inService = all.filter((e) => (e.status || 'En service') === 'En service').length;
   const toCheck = all.filter((e) => (e.status || '') === 'À contrôler' || (e.nextControl && daysUntil(e.nextControl) <= 30)).length;
   const alertEq = all.filter((e) => e.nextControl && daysUntil(e.nextControl) <= 30).sort((a, b) => String(a.nextControl).localeCompare(String(b.nextControl)));
-  v.innerHTML = `<div class="head"><div><h1>Matériel installé <span class="muted small">(${all.length})</span></h1><p class="muted small" style="margin:.3rem 0 0">Un équipement = une fiche = un QR code. Câbles, luminaires, chemins de câbles, armoires et appareillages.</p></div>${isAdmin() ? '<button class="btn primary" id="new-eq">+ Nouvel équipement</button>' : ''}</div>
+  v.innerHTML = `<div class="head"><div><h1>Matériel installé <span class="muted small">(${all.length})</span></h1><p class="muted small" style="margin:.3rem 0 0">Un équipement = une fiche = un QR code. Câbles, luminaires, chemins de câbles, armoires et appareillages.</p></div>${isAdmin() ? `<div class="row"><a class="btn" href="#/etiquettes">${ICON.scan} Étiquettes QR</a><button class="btn primary" id="new-eq">+ Nouvel équipement</button></div>` : ''}</div>
   <div class="grid g4 section">
     ${kpi(all.length, 'Équipements référencés', '', '', { icon: 'box', sub: `${cats.length} catégories` })}
     ${kpi(inService, 'En service', 'ok', '', { icon: 'check', sub: 'Exploitation normale' })}
@@ -1771,15 +1777,18 @@ ROUTES.documents = async (v) => {
   const all = D().documents || [];
   const cats = [...new Set(all.map((x) => x.category).filter(Boolean))].sort();
   const q = (PL.docQ || '').toLowerCase(); const fc = PL.docCat || ''; const fs = PL.docStatut || '';
-  const list = all.filter((x) => (!q || (x.title + ' ' + x.ref + ' ' + (x.owner || '')).toLowerCase().includes(q)) && (!fc || x.category === fc) && (!fs || x.status === fs))
+  const ft = PL.docTag || '';
+  const list = all.filter((x) => (!q || (x.title + ' ' + x.ref + ' ' + (x.owner || '') + ' ' + (x.tags || []).join(' ')).toLowerCase().includes(q)) && (!fc || x.category === fc) && (!fs || x.status === fs) && (!ft || (x.tags || []).includes(ft)))
     .sort((a, b) => String(a.title).localeCompare(String(b.title)));
   const alerts = docAlerts();
+  const overdue = all.filter((x) => x.reviewAt && x.reviewAt < todayISO() && x.status !== 'Archivé');
+  const tags = [...new Set(all.flatMap((x) => x.tags || []))].sort();
   const canEdit = !isTech();
   v.innerHTML = `<div class="head"><div><h1>Bibliothèque documentaire <span class="muted small">(${all.length})</span></h1><p class="muted small" style="margin:.3rem 0 0">Documents techniques, sécurité et nucléaire : version, responsable, site, statut et date de révision.</p></div>${canEdit ? '<button class="btn primary" id="new-doc">+ Nouveau document</button>' : ''}</div>
   <div class="grid g4 section">
     ${kpi(all.length, 'Documents référencés', '', '', { icon: 'doc', sub: `${cats.length} catégories` })}
     ${kpi(all.filter((x) => x.status === 'Valide').length, 'À jour', 'ok', '', { icon: 'check', sub: 'Version en vigueur' })}
-    ${kpi(alerts.length, 'À réviser ou remplacer', alerts.length ? 'warn' : 'ok', '', { icon: 'alert', sub: 'Revue sous 30 jours incluse' })}
+    ${kpi(alerts.length, 'À réviser ou remplacer', alerts.length ? 'warn' : 'ok', '', { icon: 'alert', sub: overdue.length ? overdue.length + ' revue(s) en retard' : 'Revue sous 30 jours incluse' })}
     ${kpi(new Set(all.map((x) => x.siteId).filter(Boolean)).size, 'Sites couverts', '', '#/sites', { icon: 'globe', sub: 'Documents rattachés' })}
   </div>
   <div class="grid g23 section">
@@ -1792,9 +1801,10 @@ ROUTES.documents = async (v) => {
   <div class="card section">
     <div class="toolbar"><input class="inp" id="docq" placeholder="Rechercher un document, une référence, un responsable…" value="${esc(PL.docQ || '')}">
       <select class="inp" id="doccat" aria-label="Filtrer par catégorie"><option value="">Toutes les catégories</option>${cats.map((c) => `<option value="${esc(c)}" ${fc === c ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select>
-      <select class="inp" id="docstatut" aria-label="Filtrer par statut"><option value="">Tous les statuts</option>${['Valide', 'À réviser', 'Remplacé', 'Archivé'].map((x) => `<option value="${esc(x)}" ${fs === x ? 'selected' : ''}>${esc(x)}</option>`).join('')}</select></div>
+      <select class="inp" id="docstatut" aria-label="Filtrer par statut"><option value="">Tous les statuts</option>${['Valide', 'À réviser', 'Remplacé', 'Archivé'].map((x) => `<option value="${esc(x)}" ${fs === x ? 'selected' : ''}>${esc(x)}</option>`).join('')}</select>
+      ${tags.length ? `<select class="inp" id="doctag" aria-label="Filtrer par étiquette"><option value="">Toutes les étiquettes</option>${tags.map((t) => `<option value="${esc(t)}" ${ft === t ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select>` : ''}</div>
     <div class="table-wrap"><table data-sort><thead><tr><th>Référence</th><th>Titre</th><th>Catégorie</th><th>Site</th><th>Version</th><th>Statut</th><th>Révision</th><th>Responsable</th><th data-nosort></th></tr></thead><tbody>
-    ${list.map((x) => `<tr><td><b>${esc(x.ref || '–')}</b></td><td>${esc(x.title)}${demoTag(x)}</td><td class="small">${esc(x.category || '–')}</td><td>${x.siteId ? sitePill(x.siteId) : '<span class="muted small">Tous sites</span>'}</td><td class="small">v${esc(x.version || '–')}</td><td>${docStatusPill(x.status)}</td><td class="small" data-v="${x.reviewAt ? daysUntil(x.reviewAt) : ''}">${esc(x.reviewAt ? fmtD(x.reviewAt) : '–')}</td><td class="small">${esc(x.owner || '–')}</td><td>${canEdit ? `<button class="btn sm" data-doc="${x.id}">Modifier</button>` : ''}</td></tr>`).join('') || `<tr><td colspan="9" class="muted">Aucun document${q || fc || fs ? ' ne correspond à ce filtre' : ''}.</td></tr>`}
+    ${list.map((x) => `<tr><td><b>${esc(x.ref || '–')}</b></td><td>${esc(x.title)}${demoTag(x)}</td><td class="small">${esc(x.category || '–')}</td><td>${x.siteId ? sitePill(x.siteId) : '<span class="muted small">Tous sites</span>'}</td><td class="small">v${esc(x.version || '–')}</td><td>${docStatusPill(x.status)}</td><td class="small" data-v="${x.reviewAt ? daysUntil(x.reviewAt) : ''}">${esc(x.reviewAt ? fmtD(x.reviewAt) : '–')}</td><td class="small">${esc(x.owner || '–')}</td><td><div class="row" style="gap:.3rem"><button class="btn sm" data-doc-open="${x.id}">Ouvrir</button>${canEdit ? `<button class="btn sm" data-doc="${x.id}">Modifier</button>` : ''}</div></td></tr>`).join('') || `<tr><td colspan="9" class="muted">Aucun document${q || fc || fs ? ' ne correspond à ce filtre' : ''}.</td></tr>`}
     </tbody></table></div>
     <p class="muted small" style="margin:.7rem 0 0">${list.length} document${list.length > 1 ? 's' : ''} affiché${list.length > 1 ? 's' : ''}. Un document n'est jamais supprimé : il est archivé ou remplacé, avec sa version conservée.</p>
   </div>`;
@@ -1802,6 +1812,8 @@ ROUTES.documents = async (v) => {
   bindQ('docq', 'docQ');
   const cs = $('#doccat', v); if (cs) cs.onchange = () => { PL.docCat = cs.value; render(); };
   const st = $('#docstatut', v); if (st) st.onchange = () => { PL.docStatut = st.value; render(); };
+  const tg = $('#doctag', v); if (tg) tg.onchange = () => { PL.docTag = tg.value; render(); };
+  $$('[data-doc-open]', v).forEach((b) => (b.onclick = () => { const doc = all.find((x) => x.id === b.dataset.docOpen); if (doc) docDetail(doc); }));
   $$('[data-doc]', v).forEach((b) => (b.onclick = () => { const doc = all.find((x) => x.id === b.dataset.doc); if (doc) docForm(doc); }));
   const nb = $('#new-doc', v); if (nb) nb.onclick = () => docForm();
   sortableTables(v);
@@ -1817,6 +1829,7 @@ function docForm(doc = null) {
     { name: 'siteId', label: 'Site concerné', type: 'select', options: [['', 'Tous les sites'], ...sitesList().map((st) => [st.id, st.name])], value: doc?.siteId || '' },
     { name: 'owner', label: 'Responsable du document', value: doc?.owner },
     { name: 'reviewAt', label: 'Prochaine revue', type: 'date', value: doc?.reviewAt },
+    { name: 'tags', label: 'Étiquettes (séparées par des virgules)', value: (doc?.tags || []).join(', '), placeholder: 'NF C 15-100, consignation, habilitation' },
     { name: 'link', label: 'Lien vers le fichier (optionnel)', value: doc?.link },
     { name: 'notes', label: 'Notes', type: 'textarea', value: doc?.notes },
   ], submitLabel: doc ? 'Enregistrer' : 'Ajouter le document', onSubmit: async (vals) => {
@@ -1825,29 +1838,77 @@ function docForm(doc = null) {
   } });
 }
 
+function docDetail(doc) {
+  const hist = (doc.history || []).slice().reverse();
+  const canEdit = !isTech();
+  modal(`<h2>${esc(doc.title)}</h2>
+    <div class="row" style="gap:.4rem;flex-wrap:wrap;margin-bottom:.6rem">${docStatusPill(doc.status)}<span class="pill">v${esc(doc.version || '–')}</span>${(doc.tags || []).map((t) => `<span class="pill site">${esc(t)}</span>`).join('')}</div>
+    <table><tr><th>Référence</th><td>${esc(doc.ref || '–')}</td></tr>
+    <tr><th>Catégorie</th><td>${esc(doc.category || '–')}</td></tr>
+    <tr><th>Site</th><td>${doc.siteId ? sitePill(doc.siteId) : 'Tous les sites'}</td></tr>
+    <tr><th>Responsable</th><td>${esc(doc.owner || '–')}</td></tr>
+    <tr><th>Prochaine revue</th><td>${doc.reviewAt ? fmtD(doc.reviewAt) + (doc.reviewAt < todayISO() ? ' <span class="pill red">en retard</span>' : '') : '–'}</td></tr>
+    <tr><th>Version précédente</th><td>${esc(doc.replacedVersion || '–')}</td></tr>
+    <tr><th>Fichier</th><td>${doc.link ? `<a href="${esc(doc.link)}" target="_blank" rel="noopener noreferrer">Ouvrir le fichier</a>` : '<span class="muted">Aucun lien</span>'}</td></tr>
+    <tr><th>Notes</th><td class="small">${esc(doc.notes || '–')}</td></tr></table>
+    <h3 style="font-size:.95rem;margin:1rem 0 .4rem">Historique des versions</h3>
+    ${hist.length ? `<div class="list">${hist.slice(0, 12).map((h) => `<div class="item"><span style="flex:1;min-width:0"><b>${esc(h.action || 'modification')}</b> — v${esc(h.version || '–')}<br><span class="muted small">${fmtDT(h.at)} · ${esc(h.by || '–')}</span></span>${h.status ? docStatusPill(h.status) : ''}</div>`).join('')}</div>` : '<p class="muted small">Aucune version antérieure.</p>'}
+    <div class="actions" style="flex-wrap:wrap">
+      <button class="btn" data-close>Fermer</button>
+      ${canEdit ? `<button class="btn" id="dd-review">Marquer comme revu</button><button class="btn" id="dd-version">Nouvelle version</button><button class="btn primary" id="dd-edit">Modifier</button>` : ''}
+      ${isAdmin() ? `<button class="btn" id="dd-archive">Archiver</button>` : ''}
+    </div>`, (root, close) => {
+    const rv = $('#dd-review', root); if (rv) rv.onclick = async () => { close(); await api('POST', 'documents/' + doc.id + '/review', {}); toast('Revue enregistrée : prochaine échéance dans un an'); await refresh(); };
+    const nv = $('#dd-version', root); if (nv) nv.onclick = () => { close(); docVersion(doc); };
+    const ed = $('#dd-edit', root); if (ed) ed.onclick = () => { close(); docForm(doc); };
+    const ar = $('#dd-archive', root); if (ar) ar.onclick = async () => { if (!(await confirmBox('Archiver ce document ? Il reste consultable dans l\'historique, jamais supprimé.', 'Archiver'))) return; close(); await api('DELETE', 'documents/' + doc.id); toast('Document archivé'); await refresh(); };
+  });
+}
+function docVersion(doc) {
+  formModal({ title: 'Nouvelle version du document', intro: `<p class="muted small">Version actuelle : <b>v${esc(doc.version || '–')}</b>. L'ancienne version est conservée dans l'historique.</p>`, fields: [
+    { name: 'version', label: 'Numéro de la nouvelle version', required: true, value: '' , placeholder: '2.0' },
+    { name: 'link', label: 'Lien vers le nouveau fichier', value: doc.link },
+    { name: 'owner', label: 'Responsable', value: doc.owner },
+    { name: 'reviewAt', label: 'Prochaine revue', type: 'date', value: '' },
+    { name: 'notes', label: 'Notes de version', type: 'textarea', value: '' },
+  ], submitLabel: 'Publier la nouvelle version', onSubmit: async (vals) => {
+    await api('POST', 'documents/' + doc.id + '/version', vals);
+    toast('Nouvelle version publiée'); await refresh();
+  } });
+}
+
 ROUTES.courriers = async (v) => {
   const all = D().docflows || [];
   const dir = PL.flowDir || 'Envoi';
   const list = all.filter((x) => x.direction === dir).sort((a, b) => String(b.sentAt || '').localeCompare(String(a.sentAt || '')));
   const lateness = all.filter((x) => x.status === 'Attendu' && x.sentAt && daysUntil(x.sentAt) < -10);
+  const dues = all.filter((x) => x.status === 'Attendu' && ((x.followUpAt && x.followUpAt <= todayISO()) || (!x.followUpAt && x.sentAt && daysUntil(x.sentAt) < -10)));
+  const relances = all.reduce((n, x) => n + (x.relances || 0), 0);
   const canEdit = !isTech();
   v.innerHTML = `<div class="head"><div><h1>Courriers et documents administratifs <span class="muted small">(${all.length})</span></h1><p class="muted small" style="margin:.3rem 0 0">Suivi des envois et des réceptions : plan de prévention, comptes rendus, attachements, certificats, accusés de réception.</p></div>${canEdit ? '<button class="btn primary" id="new-flow">+ Enregistrer un courrier</button>' : ''}</div>
   <div class="grid g4 section">
     ${kpi(all.filter((x) => x.direction === 'Envoi').length, 'Envois', '', '', { icon: 'send', sub: 'Documents émis' })}
     ${kpi(all.filter((x) => x.direction === 'Réception').length, 'Réceptions', '', '', { icon: 'doc', sub: 'Documents reçus' })}
     ${kpi(all.filter((x) => x.status === 'Attendu').length, 'En attente', all.some((x) => x.status === 'Attendu') ? 'warn' : '', '', { icon: 'clock', sub: 'Sans retour à ce jour' })}
-    ${kpi(lateness.length, 'Sans retour depuis 10 j', lateness.length ? 'red' : 'ok', '', { icon: 'bell', sub: 'À relancer' })}
+    ${kpi(dues.length, 'Relances à faire', dues.length ? 'red' : 'ok', '', { icon: 'bell', sub: `${relances} relance(s) déjà envoyée(s)` })}
   </div>
   <div class="card section">
     <div class="toolbar"><div class="row" style="gap:.4rem">
       ${['Envoi', 'Réception'].map((x) => `<button class="btn sm ${dir === x ? 'primary' : ''}" data-dir="${x}">${x === 'Envoi' ? 'Envois' : 'Réceptions'}</button>`).join('')}
     </div><span class="muted small" style="margin-left:auto">${list.length} élément${list.length > 1 ? 's' : ''}</span></div>
-    <div class="table-wrap"><table data-sort><thead><tr><th>Libellé</th><th>Type</th><th>${dir === 'Envoi' ? 'Destinataire' : 'Expéditeur'}</th><th>Site</th><th>Date</th><th>Statut</th><th>Accusé</th><th data-nosort></th></tr></thead><tbody>
-    ${list.map((x) => `<tr><td><b>${esc(x.name)}</b>${demoTag(x)}</td><td class="small">${esc(x.type || '–')}</td><td class="small">${esc(dir === 'Envoi' ? x.to : x.from) || '–'}</td><td>${x.siteId ? sitePill(x.siteId) : '–'}</td><td class="small" data-v="${x.sentAt || ''}">${esc(fmtD(x.sentAt))}</td><td>${flowStatusPill(x.status)}</td><td>${x.ack ? '<span class="pill green">Oui</span>' : '<span class="pill">Non</span>'}</td><td>${canEdit ? `<button class="btn sm" data-flow="${x.id}">Suivre</button>` : ''}</td></tr>`).join('') || `<tr><td colspan="8" class="muted">Aucun courrier dans cette catégorie.</td></tr>`}
+    <div class="table-wrap"><table data-sort><thead><tr><th>Libellé</th><th>Type</th><th>${dir === 'Envoi' ? 'Destinataire' : 'Expéditeur'}</th><th>Site</th><th>Date</th><th>Statut</th><th>Accusé</th><th>Relances</th><th data-nosort></th></tr></thead><tbody>
+    ${list.map((x) => `<tr><td><b>${esc(x.name)}</b>${demoTag(x)}</td><td class="small">${esc(x.type || '–')}</td><td class="small">${esc(dir === 'Envoi' ? x.to : x.from) || '–'}</td><td>${x.siteId ? sitePill(x.siteId) : '–'}</td><td class="small" data-v="${x.sentAt || ''}">${esc(fmtD(x.sentAt))}</td><td>${flowStatusPill(x.status)}</td><td>${x.ack ? '<span class="pill green">Oui</span>' : '<span class="pill">Non</span>'}</td><td class="small">${x.relances ? `<span class="pill orange">${x.relances}</span>` : '–'}${x.followUpAt ? `<br><span class="muted small">${esc(fmtD(x.followUpAt))}</span>` : ''}</td><td class="small">${canEdit ? `<div class="row" style="gap:.3rem">${x.status === 'Attendu' ? `<button class="btn sm" data-relance="${x.id}">Relancer</button>` : ''}<button class="btn sm" data-flow="${x.id}">Suivre</button></div>` : ''}</td></tr>`).join('') || `<tr><td colspan="9" class="muted">Aucun courrier dans cette catégorie.</td></tr>`}
     </tbody></table></div>
   </div>`;
   $$('[data-dir]', v).forEach((b) => (b.onclick = () => { PL.flowDir = b.dataset.dir; render(); }));
   $$('[data-flow]', v).forEach((b) => (b.onclick = () => { const f = all.find((x) => x.id === b.dataset.flow); if (f) flowForm(f); }));
+  $$('[data-relance]', v).forEach((b) => (b.onclick = async () => {
+    const f = all.find((x) => x.id === b.dataset.relance); if (!f) return;
+    const ok = await confirmBox(`Enregistrer une relance pour « ${f.name} » ? La prochaine relance sera proposée dans 7 jours.`, 'Relancer');
+    if (!ok) return;
+    await api('POST', 'docflows/' + f.id + '/relance', {});
+    toast('Relance enregistrée'); await refresh();
+  }));
   const nb = $('#new-flow', v); if (nb) nb.onclick = () => flowForm();
   sortableTables(v);
 };
@@ -1862,8 +1923,12 @@ function flowForm(f = null) {
     { name: 'siteId', label: 'Site', type: 'select', options: [['', '–'], ...sitesList().map((s) => [s.id, s.name])], value: f?.siteId || '' },
     { name: 'status', label: 'Statut', type: 'select', options: st, value: f?.status || 'Attendu' },
     { name: 'ack', label: 'Accusé de réception reçu', type: 'checkbox', value: !!f?.ack },
+    { name: 'ref', label: 'Référence du courrier', value: f?.ref, placeholder: 'CR-2026-034' },
     { name: 'sentAt', label: 'Date d\'envoi', type: 'date', value: f?.sentAt },
+    { name: 'followUpAt', label: 'Prochaine relance', type: 'date', value: f?.followUpAt },
     { name: 'receivedAt', label: 'Date de réception', type: 'date', value: f?.receivedAt },
+    { name: 'ackAt', label: 'Accusé reçu le', type: 'date', value: f?.ackAt },
+    { name: 'link', label: 'Lien vers le document (optionnel)', value: f?.link },
     { name: 'owner', label: 'Responsable du suivi', value: f?.owner },
     { name: 'notes', label: 'Notes', type: 'textarea', value: f?.notes },
   ], submitLabel: f ? 'Mettre à jour' : 'Enregistrer', onSubmit: async (vals) => {
@@ -1880,7 +1945,7 @@ ROUTES.maintenance = async (v) => {
   v.innerHTML = `<div class="head"><div><h1>Maintenance, contrôles et signalements</h1><p class="muted small" style="margin:.3rem 0 0">Maintenances préventives, correctives et contrôles réglementaires, avec les signalements remontés du terrain.</p></div>${!isTech() ? `<div class="row">${tab === 'plan' ? '<button class="btn primary" id="new-maint">+ Planifier une maintenance</button>' : ''}</div>` : ''}</div>
   <div class="grid g4 section">
     ${kpi(mts.filter((m) => m.status === 'Planifiée').length, 'Maintenances planifiées', '', '', { icon: 'cal', sub: `${mts.length} au total` })}
-    ${kpi(late.length, 'Échéances sous 7 jours', late.length ? 'warn' : 'ok', '', { icon: 'clock', sub: 'Dont retards' })}
+    ${kpi(late.length, 'Échéances sous 7 jours', late.length ? 'warn' : 'ok', '', { icon: 'clock', sub: `${mts.filter((m) => m.status !== 'Réalisée' && m.status !== 'Annulée' && m.dueDate && m.dueDate < todayISO()).length} en retard` })}
     ${kpi(open.length, 'Signalements ouverts', open.length ? 'red' : 'ok', '', { icon: 'alert', sub: `${reps.length} signalements tracés` })}
     ${kpi(mts.filter((m) => m.kind === 'Contrôle réglementaire').length, 'Contrôles réglementaires', '', '', { icon: 'shield', sub: 'Suivi de conformité' })}
   </div>
@@ -1890,7 +1955,7 @@ ROUTES.maintenance = async (v) => {
       <button class="btn sm ${tab === 'sig' ? 'primary' : ''}" data-tab="sig">Signalements</button>
     </div>${tab === 'sig' && !isTech() ? '<span class="muted small" style="margin-left:auto">Traitement réservé à l\'encadrement</span>' : ''}</div>
     ${tab === 'plan' ? `<div class="table-wrap"><table data-sort><thead><tr><th>Équipement</th><th>Opération</th><th>Nature</th><th>Site</th><th>Échéance</th><th>Intervenant</th><th>Statut</th><th data-nosort></th></tr></thead><tbody>
-      ${mts.slice().sort((a, b) => String(a.dueDate || '').localeCompare(String(b.dueDate || ''))).map((m) => { const eq = DF().equipment.find((x) => x.id === m.equipId); return `<tr><td>${eq ? `<a href="#/equipement/${eq.id}">${esc(eq.name)}</a>` : esc(m.equipId || '–')}</td><td><b>${esc(m.title)}</b></td><td class="small">${esc(m.kind)}</td><td>${sitePill(m.siteId) || '–'}</td><td class="small" data-v="${m.dueDate ? daysUntil(m.dueDate) : ''}">${esc(m.dueDate ? fmtD(m.dueDate) : '–')}${m.dueDate && m.status !== 'Réalisée' && daysUntil(m.dueDate) < 0 ? ' <span class="pill red">Retard</span>' : ''}</td><td class="small">${esc(m.provider || '')}${m.assignee && techById(m.assignee) ? ' · ' + esc(techById(m.assignee).firstName + ' ' + techById(m.assignee).lastName) : ''}</td><td>${maintStatusPill(m.status)}</td><td>${!isTech() ? `<button class="btn sm" data-maint="${m.id}">Suivre</button>` : ''}</td></tr>`; }).join('') || `<tr><td colspan="8" class="muted">Aucune maintenance planifiée.</td></tr>`}
+      ${mts.slice().sort((a, b) => String(a.dueDate || '').localeCompare(String(b.dueDate || ''))).map((m) => { const eq = DF().equipment.find((x) => x.id === m.equipId); return `<tr><td>${eq ? `<a href="#/equipement/${eq.id}">${esc(eq.name)}</a>` : esc(m.equipId || '–')}</td><td><b>${esc(m.title)}</b>${m.periodMonths ? `<br><span class="muted small">Tous les ${m.periodMonths} mois</span>` : ''}</td><td class="small">${esc(m.kind)}</td><td>${sitePill(m.siteId) || '–'}</td><td class="small" data-v="${m.dueDate ? daysUntil(m.dueDate) : ''}">${esc(m.dueDate ? fmtD(m.dueDate) : '–')}${m.dueDate && m.status !== 'Réalisée' && daysUntil(m.dueDate) < 0 ? ' <span class="pill red">Retard</span>' : ''}</td><td class="small">${esc(m.provider || '')}${m.assignee && techById(m.assignee) ? ' · ' + esc(techById(m.assignee).firstName + ' ' + techById(m.assignee).lastName) : ''}</td><td>${maintStatusPill(m.status)}</td><td>${!isTech() ? `<button class="btn sm" data-maint="${m.id}">Suivre</button>` : ''}</td></tr>`; }).join('') || `<tr><td colspan="8" class="muted">Aucune maintenance planifiée.</td></tr>`}
     </tbody></table></div>` : `<div class="table-wrap"><table data-sort><thead><tr><th>Date</th><th>Équipement</th><th>Type</th><th>Urgence</th><th>Description</th><th>Auteur</th><th>Statut</th><th data-nosort></th></tr></thead><tbody>
       ${reps.slice().sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || ''))).map((r) => { const eq = DF().equipment.find((x) => x.id === r.equipId); return `<tr><td class="small" data-v="${r.createdAt || ''}">${esc(fmtDT(r.createdAt))}</td><td>${eq ? `<a href="#/equipement/${eq.id}">${esc(eq.name)}</a>` : esc(r.equipId || '–')}</td><td>${esc(r.type)}</td><td>${urgencyPill(r.urgency)}</td><td class="small">${esc(r.description)}</td><td class="small">${esc(r.authorName || r.author || '–')}</td><td>${repStatusPill(r.status)}</td><td>${!isTech() ? `<button class="btn sm" data-rep="${r.id}">Traiter</button>` : ''}</td></tr>`; }).join('') || `<tr><td colspan="8" class="muted">Aucun signalement.</td></tr>`}
     </tbody></table></div>`}
@@ -1910,10 +1975,16 @@ function maintForm(m = null) {
     { name: 'status', label: 'Statut', type: 'select', options: ['Planifiée', 'En cours', 'Réalisée', 'Annulée'], value: m?.status || 'Planifiée' },
     { name: 'dueDate', label: 'Échéance', type: 'date', value: m?.dueDate },
     { name: 'doneAt', label: 'Réalisée le', type: 'date', value: m?.doneAt },
+    { name: 'periodMonths', label: 'Périodicité (mois, 0 = ponctuelle)', type: 'number', min: 0, max: 120, value: m?.periodMonths ?? 0 },
+    { name: 'durationH', label: 'Durée estimée (heures)', type: 'number', min: 0, step: '0.5', value: m?.durationH },
+    { name: 'cost', label: 'Coût (€)', type: 'number', min: 0, step: '0.01', value: m?.cost },
+    { name: 'contractRef', label: 'Référence du contrat', value: m?.contractRef },
+    { name: 'proof', label: 'Preuve / rapport (lien)', value: m?.proof },
     { name: 'provider', label: 'Organisme / prestataire', value: m?.provider },
     { name: 'assignee', label: 'Intervenant interne', type: 'select', options: [['', '–'], ...DF().technicians.map((t) => [t.id, t.firstName + ' ' + t.lastName])], value: m?.assignee },
+    { name: 'checklist', label: 'Points de contrôle (un par ligne)', type: 'textarea', value: Array.isArray(m?.checklist) ? m.checklist.join('\n') : (m?.checklist || '') },
     { name: 'notes', label: 'Notes', type: 'textarea', value: m?.notes },
-  ], submitLabel: m ? 'Mettre à jour' : 'Planifier', onSubmit: async (vals) => {
+  ], submitLabel: m ? 'Mettre à jour' : 'Planifier', intro: m && m.periodMonths ? `<p class="muted small">Passer le statut à <b>Réalisée</b> crée automatiquement la prochaine échéance (tous les ${m.periodMonths} mois).</p>` : '', onSubmit: async (vals) => {
     if (m) await api('PUT', 'maintenances/' + m.id, vals); else await api('POST', 'maintenances', vals);
     toast(m ? 'Maintenance mise à jour' : 'Maintenance planifiée'); await refresh();
   } });
@@ -2098,20 +2169,125 @@ const csvD = (s) => (s ? fmtD(s) : '');
 function csv(rows) { return '\ufeff' + rows.map((r) => r.map((c) => `"${String(c ?? '').replace(/"/g, '""')}"`).join(';')).join('\r\n'); }
 ROUTES.rapports = async (v) => {
   if (isTech()) { v.innerHTML = '<div class="card"><p>Les rapports sont réservés aux chefs de chantier et à l\'administrateur.</p></div>'; return; }
-  v.innerHTML = `<div class="head"><h1>Rapports et exports</h1></div>
-  <div class="grid g2">
-  <div class="card"><h2>Rapport PDF de chantier</h2><label class="f">Chantier<select id="rp-ch">${D().chantiers.map((c) => `<option value="${c.id}">${esc(c.name)}</option>`).join('')}</select></label><button class="btn primary" id="rp-go" ${D().chantiers.length ? '' : 'disabled'}>Générer le PDF</button>
-    <p class="muted small">En-tête MIMOUNI INDUSTRIEL ÉLECTRICITÉ, infos et dates du chantier, avancement, heures, tâches, matériel, interventions, zone de visa.</p></div>
-  <div class="card"><h2>Exports tableur (CSV)</h2><div class="row"><button class="btn" id="x-tasks">Tâches et heures</button><button class="btn" id="x-abs">Absences</button><button class="btn" id="x-ts">Feuilles d'heures</button>${isAdmin() ? '<button class="btn" id="x-habs">Habilitations</button>' : ''}</div><p class="muted small">${isChef() ? 'Limité à vos chantiers et à votre équipe.' : 'Ouvrable dans Excel.'}</p></div>
-  ${isAdmin() ? `<div class="card"><h2>Export complet (ZIP)</h2><p class="small">Toutes les données (JSON) et toutes les photos, dans un fichier ZIP daté.</p><button class="btn dark" id="x-all">Exporter tout (ZIP)</button><p class="muted small" id="x-all-msg"></p></div>` : ''}
-  </div>`;
+  const from = PL.rpFrom || (todayISO().slice(0, 4) + '-01-01');
+  const to = PL.rpTo || todayISO();
+  const fSite = PL.rpSite || '';
+  const inRange = (d) => { const x = String(d || '').slice(0, 10); return !!x && x >= from && x <= to; };
+  const sheetLines = (D().timesheets || []).flatMap((f) => (f.lines || []).map((l) => ({ ...l, date: f.date, techId: f.techId, status: f.status, decidedBy: f.decidedBy, refuseReason: f.refuseReason })));
+  const hours = sheetLines.filter((l) => inRange(l.date) && (!fSite || chantierById(l.chantierId)?.siteId === fSite)).reduce((n, l) => n + (Number(l.hours) || 0), 0);
+  const chs = D().chantiers.filter((c) => !fSite || c.siteId === fSite);
+  const openCh = chs.filter((c) => c.status !== 'Clôturé' && c.status !== 'Annulé');
+  const exports = [
+    ['chantiers', 'Chantiers (avancement, heures, client)', () => [['Chantier', 'Client', 'Site', 'Statut', 'Début', 'Fin prévue', 'Tâches', 'Heures prévues', 'Heures réalisées'], ...chs.map((c) => { const ts = D().tasks.filter((t) => t.chantierId === c.id); return [c.name, c.client, siteById(c.siteId)?.name || '', c.status, csvD(c.start), csvD(c.endPlanned), ts.length, ts.reduce((n, t) => n + (Number(t.plannedHours) || 0), 0), ts.reduce((n, t) => n + realH(t), 0)]; })]],
+    ['heures', 'Heures par technicien et chantier', () => [['Date', 'Technicien', 'Chantier', 'Tâche', 'Heures', 'Statut', 'Décidé par', 'Motif du refus'], ...sheetLines.filter((l) => inRange(l.date) && (!fSite || chantierById(l.chantierId)?.siteId === fSite)).sort((a, b) => String(a.date).localeCompare(String(b.date))).map((l) => [csvD(l.date), techName(l.techId), chantierById(l.chantierId)?.name || 'Autre', (D().tasks.find((t) => t.id === l.taskId) || {}).title || '', String(l.hours).replace('.', ','), l.status === 'Envoyée' ? 'À valider' : l.status, userName(l.decidedBy), l.refuseReason])]],
+    ['habilitations', 'Habilitations et échéances', () => [['Technicien', 'Type', 'Symbole', 'Délivrée', 'Fin de validité', 'État', 'Justificatif'], ...D().technicians.flatMap((t) => currentHabs(t).map((hb) => [t.firstName + ' ' + t.lastName, hb.kind, hb.symbol, csvD(hb.issued), csvD(hb.expires), habStatus(hb).label, hb.proof ? 'oui' : 'non']))]],
+    ['documents', 'Documents, versions et revues', () => [['Titre', 'Référence', 'Catégorie', 'Version', 'Statut', 'Responsable', 'Prochaine revue', 'Étiquettes'], ...(DF().documents || []).filter((x) => !fSite || !x.siteId || x.siteId === fSite).map((x) => [x.title, x.ref, x.category, x.version, x.status, x.owner, csvD(x.reviewAt), (x.tags || []).join(' ')])]],
+    ['courriers', 'Courriers, accusés et relances', () => [['Libellé', 'Référence', 'Sens', 'Tiers', 'Date', 'Statut', 'Accusé', 'Relances', 'Prochaine relance'], ...(D().docflows || []).filter((x) => inRange(x.sentAt) && (!fSite || x.siteId === fSite)).map((x) => [x.name, x.ref, x.direction, x.direction === 'Envoi' ? x.to : x.from, csvD(x.sentAt), x.status, x.ack ? 'oui' : 'non', x.relances || 0, csvD(x.followUpAt)])]],
+    ['maintenances', 'Maintenances et contrôles', () => [['Équipement', 'Opération', 'Nature', 'Statut', 'Échéance', 'Réalisée le', 'Périodicité (mois)', 'Coût', 'Prestataire'], ...(D().maintenances || []).filter((m) => !fSite || m.siteId === fSite).map((m) => [(DF().equipment.find((x) => x.id === m.equipId) || {}).name || m.equipId, m.title, m.kind, m.status, csvD(m.dueDate), csvD(m.doneAt), m.periodMonths || 0, m.cost || 0, m.provider])]],
+    ['stocks', 'Stocks et seuils', () => [['Article', 'Référence', 'Emplacement', 'Quantité', 'Seuil mini', 'Unité', 'Valeur'], ...(D().stock || []).map((x) => [x.name, x.ref, x.location, x.qty, x.minQty, x.unit, x.price ? (Number(x.qty) || 0) * (Number(x.price) || 0) : ''])]],
+    ['equipements', 'Équipements et contrôles', () => [['Code', 'Désignation', 'Catégorie', 'Site', 'État', 'Criticité', 'Prochain contrôle', 'Impressions QR'], ...(DF().equipment || []).filter((e) => !fSite || e.siteId === fSite).map((e) => [e.id, e.name, e.category || e.type, siteById(e.siteId)?.name || '', e.status, e.criticality, csvD(e.nextControl), e.labelPrints || 0])]],
+    ['absences', 'Absences et disponibilité', () => [['Technicien', 'Type', 'Du', 'Au', 'Statut', 'Motif'], ...(D().absences || []).filter((a) => inRange(a.start) && (!fSite || (D().technicians.find((t) => t.id === a.techId) || {}).siteId === fSite)).map((a) => [techName(a.techId), absLabel(a), csvD(a.start), csvD(a.end), a.status, a.motif])]],
+    ['signalements', 'Signalements et traitement', () => [['Date', 'Équipement', 'Type', 'Urgence', 'Description', 'Auteur', 'Statut', 'Résolution'], ...(D().reports || []).filter((r) => inRange(r.createdAt)).map((r) => [r.createdAt, (DF().equipment.find((x) => x.id === r.equipId) || {}).name || r.equipId, r.type, r.urgency, r.description, r.authorName || r.author, r.status, r.resolution])]],
+  ];
+  v.innerHTML = `<div class="head"><div><h1>Rapports et exports</h1>
+    <p class="muted small" style="margin:.3rem 0 0">Une période, un site, puis le format : PDF pour transmettre, CSV pour calculer, ZIP pour archiver, paquet de preuve pour démontrer.</p></div>
+    <button class="btn primary" id="rp-pdf">${ICON.doc} Rapport d'exploitation (PDF)</button></div>
+  <div class="card section"><div class="toolbar">
+    <label class="f" style="margin:0">Du<input class="inp" type="date" id="rp-from" value="${esc(from)}"></label>
+    <label class="f" style="margin:0">Au<input class="inp" type="date" id="rp-to" value="${esc(to)}"></label>
+    <select class="inp" id="rp-site" aria-label="Site"><option value="">Tous les sites</option>${sitesList().map((s) => `<option value="${esc(s.id)}" ${fSite === s.id ? 'selected' : ''}>${esc(s.name)}</option>`).join('')}</select>
+    <span class="muted small" style="margin-left:auto">${isChef() ? 'Limité à vos chantiers et à votre équipe' : 'Périmètre complet'}</span></div>
+  </div>
+  <div class="grid g4 section">
+    ${kpi(h(hours), 'Heures sur la période', '', '', { icon: 'clock', sub: fmtD(from) + ' → ' + fmtD(to) })}
+    ${kpi(openCh.length, 'Chantiers ouverts', openCh.length ? 'warn' : 'ok', '', { icon: 'site', sub: chs.length + ' au total sur le périmètre' })}
+    ${kpi(exports.length, 'Exports disponibles', '', '', { icon: 'doc', sub: 'CSV compatibles Excel' })}
+    ${kpi((DF().documents || []).filter((x) => x.reviewAt && x.reviewAt < todayISO()).length, 'Documents en retard de revue', '', '', { icon: 'alert', sub: 'À traiter avant audit' })}
+  </div>
+  <div class="grid g2 section">
+    <div class="card"><h2>${ICON.doc} Rapport PDF de chantier</h2>
+      <label class="f">Chantier<select id="rp-ch">${chs.map((c) => `<option value="${c.id}">${esc(c.name)}</option>`).join('')}</select></label>
+      <button class="btn primary" id="rp-go" ${chs.length ? '' : 'disabled'}>Générer le PDF du chantier</button>
+      <p class="muted small">En-tête MIMOUNI INDUSTRIEL ÉLECTRICITÉ, dates, avancement, heures, tâches, matériel, interventions, zone de visa.</p></div>
+    <div class="card"><h2>${ICON.shield} Preuve et traçabilité</h2>
+      <p class="small">Le paquet de preuve contient les entrées du journal sur la période, l'état de la chaîne d'intégrité et l'identité de son auteur. Il est lui-même inscrit au journal.</p>
+      ${isAdmin() ? '<a class="btn dark" href="#/preuves">Ouvrir Preuves et traçabilité</a>' : '<p class="muted small">Réservé à l\'administrateur.</p>'}</div>
+  </div>
+  <div class="card section"><h2>${ICON.doc} Exports CSV</h2><div class="row" style="flex-wrap:wrap">${exports.map(([k, label]) => `<button class="btn sm" data-exp="${k}">${esc(label)}</button>`).join('')}</div>
+    <p class="muted small" style="margin:.6rem 0 0">Chaque export applique la période et le site choisis plus haut. Séparateur point-virgule, encodage UTF-8 avec BOM : ouverture directe dans Excel.</p></div>
+  ${isAdmin() ? `<div class="card section"><h2>${ICON.box} Export complet (ZIP)</h2><p class="small">Toutes les données (JSON), l'historique et toutes les photos, dans un fichier ZIP daté.</p><button class="btn dark" id="x-all">Exporter tout (ZIP)</button><p class="muted small" id="x-all-msg"></p></div>` : ''}`;
+  const bind = (id, key, cb) => { const el = $('#' + id, v); if (el) el.onchange = () => { PL[key] = el.value; (cb || render)(); }; };
+  bind('rp-from', 'rpFrom'); bind('rp-to', 'rpTo'); bind('rp-site', 'rpSite');
+  $('#rp-pdf', v).onclick = async () => { try { await rapportPDF({ from, to, site: fSite }); } catch (e) { toast(e.message); } };
   $('#rp-go', v).onclick = async () => { const c = chantierById($('#rp-ch', v).value); if (c) { try { await chantierPDF(c); } catch (e) { toast(e.message); } } };
-  $('#x-tasks', v).onclick = () => download(`taches-${todayISO()}.csv`, new Blob([csv([['Chantier', 'Tâche', 'Statut', 'Heures prévues', 'Heures réalisées', 'Échéance', 'Affecté à'], ...D().tasks.map((t) => [chantierById(t.chantierId)?.name, t.title, t.status, String(t.plannedHours).replace('.', ','), String(realH(t)).replace('.', ','), csvD(t.end), techName(t.assignee)])])], { type: 'text/csv' }));
-  $('#x-abs', v).onclick = () => download(`absences-${todayISO()}.csv`, new Blob([csv([['Technicien', 'Type', 'Du', 'Au', 'Statut', 'Motif'], ...D().absences.map((a) => [techName(a.techId), absLabel(a), csvD(a.start), csvD(a.end), a.status, a.motif])])], { type: 'text/csv' }));
-  const xh = $('#x-habs', v); if (xh) xh.onclick = () => download(`habilitations-${todayISO()}.csv`, new Blob([csv([['Technicien', 'Type', 'Symbole', 'Délivrée', 'Fin de validité', 'État'], ...D().technicians.flatMap((t) => currentHabs(t).map((hb) => [t.firstName + ' ' + t.lastName, hb.kind, hb.symbol, csvD(hb.issued), csvD(hb.expires), habStatus(hb).label]))])], { type: 'text/csv' }));
-  $('#x-ts', v).onclick = () => download(`feuilles-heures-${todayISO()}.csv`, new Blob([csv([['Date', 'Technicien', 'Chantier', 'Tâche', 'Heures', 'Détail', 'Statut', 'Décidé par', 'Motif du refus'], ...(D().timesheets || []).slice().sort((a, b) => a.date.localeCompare(b.date)).flatMap((f) => (f.lines || []).map((l) => [csvD(f.date), techName(f.techId), chantierById(l.chantierId)?.name || 'Autre chantier', (D().tasks.find((t) => t.id === l.taskId) || {}).title || '', String(l.hours).replace('.', ','), l.note, f.status === 'Envoyée' ? 'À valider' : f.status, userName(f.decidedBy), f.refuseReason]))])], { type: 'text/csv' }));
+  $$('[data-exp]', v).forEach((b) => (b.onclick = () => {
+    const def = exports.find(([k]) => k === b.dataset.exp); if (!def) return;
+    const rows = def[2]();
+    download(`${def[0]}-${from}_${to}.csv`, new Blob([csv(rows)], { type: 'text/csv;charset=utf-8' }));
+    toast(`${rows.length - 1} ligne(s) exportée(s)`, 5000);
+  }));
   const xa = $('#x-all', v); if (xa) xa.onclick = () => exportAll($('#x-all-msg', v));
 };
+
+// Rapport d'exploitation : synthèse lisible de la période, en PDF.
+async function rapportPDF({ from, to, site }) {
+  await loadScript('/vendor/jspdf.umd.min.js');
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+  const W = 210, M = 15; let y = 0;
+  const header = () => {
+    doc.setFillColor(17, 17, 17); doc.rect(0, 0, W, 24, 'F');
+    doc.setFillColor(200, 16, 46); doc.rect(0, 24, W, 2, 'F');
+    doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'bold'); doc.setFontSize(14);
+    doc.text('MIMOUNI INDUSTRIEL ÉLECTRICITÉ', M, 12);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(9);
+    doc.text('Rapport d\'exploitation', M, 18.5);
+    doc.text('Édité le ' + new Date().toLocaleDateString('fr-FR'), W - M, 18.5, { align: 'right' });
+    doc.setTextColor(17, 17, 17); y = 34;
+  };
+  const need = (n) => { if (y + n > 275) { doc.addPage(); header(); } };
+  const section = (t) => { need(12); doc.setFont('helvetica', 'bold'); doc.setFontSize(11); doc.setTextColor(200, 16, 46); doc.text(t.toUpperCase(), M, y); doc.setDrawColor(200, 16, 46); doc.line(M, y + 1.4, W - M, y + 1.4); doc.setTextColor(17, 17, 17); y += 7; };
+  const line = (txt) => { need(6); doc.setFont('helvetica', 'normal'); doc.setFontSize(9); const l = doc.splitTextToSize(String(txt), W - 2 * M); doc.text(l, M, y); y += l.length * 4.4 + 1.2; };
+  header();
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(10);
+  doc.text('Période : ' + fmtD(from) + ' au ' + fmtD(to), M, y); y += 6;
+  doc.text('Périmètre : ' + (site ? siteById(site)?.name || site : 'tous les sites'), M, y); y += 10;
+  const inRange = (d) => { const x = String(d || '').slice(0, 10); return !!x && x >= from && x <= to; };
+  const bySite = (c) => !site || c.siteId === site;
+  const sheets = (D().timesheets || []).flatMap((f) => (f.lines || []).map((l) => ({ ...l, date: f.date })));
+  const hours = sheets.filter((l) => inRange(l.date) && (!site || chantierById(l.chantierId)?.siteId === site)).reduce((n, l) => n + (Number(l.hours) || 0), 0);
+  const chs = D().chantiers.filter(bySite);
+  section('Activité');
+  line('Chantiers suivis : ' + chs.length + ' · ouverts : ' + chs.filter((c) => c.status !== 'Clôturé' && c.status !== 'Annulé').length);
+  line('Heures pointées sur la période : ' + h(hours));
+  line('Tâches en cours : ' + (D().tasks || []).filter((t) => t.status !== 'Terminée' && t.status !== 'Annulée').length + ' · signalements ouverts : ' + (D().reports || []).filter((r) => r.status === 'Ouvert' || r.status === 'En cours').length);
+  section('Chantiers');
+  chs.slice(0, 25).forEach((c) => line('• ' + c.name + ' — ' + (c.status || '–') + (c.client ? ' · ' + c.client : '') + ' · fin prévue ' + (c.endPlanned || '–')));
+  section('Conformité');
+  const habs = (D().technicians || []).flatMap((t) => currentHabs(t).map((hb) => ({ t, hb }))).filter((x) => x.hb.expires && x.hb.expires <= to);
+  line('Habilitations arrivant à échéance sur la période : ' + habs.length);
+  habs.slice(0, 12).forEach((x) => line('• ' + x.t.firstName + ' ' + x.t.lastName + ' — ' + x.hb.kind + ' : ' + x.hb.expires));
+  const docs = (DF().documents || []).filter((d) => d.status !== 'Archivé' && ((d.status === 'À réviser') || (d.reviewAt && d.reviewAt < todayISO())));
+  line('Documents à réviser : ' + docs.length);
+  docs.slice(0, 10).forEach((d) => line('• ' + d.title + ' (v' + (d.version || '–') + ') — revue ' + (d.reviewAt || 'non planifiée')));
+  section('Courriers et maintenance');
+  const flows = (D().docflows || []).filter((f) => f.status === 'Attendu');
+  line('Courriers en attente de retour : ' + flows.length);
+  flows.slice(0, 10).forEach((f) => line('• ' + f.name + ' → ' + (f.to || '–') + ' · ' + (f.sentAt || '–') + (f.relances ? ' · ' + f.relances + ' relance(s)' : '')));
+  const mts = (D().maintenances || []).filter((m) => m.status !== 'Réalisée' && m.status !== 'Annulée').sort((a, b) => String(a.dueDate).localeCompare(String(b.dueDate)));
+  line('Maintenances ouvertes : ' + mts.length + ' · en retard : ' + mts.filter((m) => m.dueDate && m.dueDate < todayISO()).length);
+  mts.slice(0, 10).forEach((m) => line('• ' + m.title + ' — ' + (m.dueDate || '–') + ' · ' + (m.provider || 'interne')));
+  const stock = (D().stock || []).filter((x) => Number(x.qty) <= Number(x.minQty || 0));
+  if (stock.length) { section('Stocks sous le seuil'); stock.slice(0, 12).forEach((x) => line('• ' + x.name + ' : ' + x.qty + ' ' + (x.unit || '') + ' (seuil ' + x.minQty + ')')); }
+  section('Visa');
+  line('Rapport établi automatiquement à partir des données saisies. Les montants, heures et statuts engagent la responsabilité de leur auteur.');
+  y += 10;
+  need(24);
+  doc.setDrawColor(120, 120, 120); doc.line(M, y + 14, M + 70, y + 14); doc.line(W - M - 70, y + 14, W - M, y + 14);
+  doc.setFontSize(8); doc.text('Nom et visa de l\'encadrement', M, y + 18); doc.text('Date', W - M - 70, y + 18);
+  doc.save(`rapport-exploitation-${from}_${to}.pdf`);
+}
+
 async function exportAll(msgEl) {
   msgEl.textContent = 'Préparation de l\'export…';
   await loadScript('/vendor/jszip.min.js');
@@ -2593,6 +2769,7 @@ ROUTES.reglages = async (v) => {
   <div class="card"><h2>Sauvegardes</h2><p class="small">Sauvegarde automatique chaque jour (30 conservées) + sauvegarde manuelle à tout moment. Une restauration fait d'abord une sauvegarde de sécurité et n'efface rien.</p>
     <button class="btn dark" id="bk-now">Sauvegarder maintenant</button> <a class="btn" href="#/rapports">Export complet (ZIP)</a>
     <div class="list" style="margin-top:.6rem">${backups.slice(0, 12).map((b) => `<div class="item"><span class="small">${esc(b)}</span><button class="btn sm" data-restore="${esc(b)}">Restaurer</button></div>`).join('') || '<p class="muted small">Aucune sauvegarde pour l\'instant (la première automatique aura lieu cette nuit).</p>'}</div></div>
+  <div id="notif-slot"></div>
   <div class="card"><h2>Données d'exemple</h2><p class="small">Pour essayer le logiciel : 7 sites (nucléaire et industriel), 80 personnes (chefs de chantier, chefs d'équipe, électriciens, automaticiens…), 14 chantiers, 84 tâches, 65 équipements avec QR, 20 véhicules, la documentation, les courriers, la maintenance et les signalements, tous marqués « Exemple ».</p>
     <div class="row"><button class="btn" id="demo-load">Charger des données d'exemple</button><button class="btn" id="demo-clear">Effacer les données d'exemple</button></div></div>
   </div>`;
@@ -2614,6 +2791,7 @@ ROUTES.reglages = async (v) => {
     intro: `<div class="notice"><b>Attention :</b> le logiciel va revenir <b>exactement</b> à l'état de la sauvegarde « ${esc(b.dataset.restore)} ». Tout ce qui a été créé ou modifié depuis (chantiers, tâches, heures, absences, matériel, historique, comptes) sera <b>retiré</b>. Une sauvegarde de sécurité de l'état actuel est faite juste avant. Le compte administrateur actuel est conservé.</div>`,
     fields: [{ name: 'confirm', label: 'Pour confirmer, tapez RESTAURER en majuscules', required: true, autocomplete: 'off' }],
     onSubmit: async (vals) => { if (vals.confirm !== 'RESTAURER') throw new Error('Tapez exactement RESTAURER (en majuscules) pour confirmer.'); const r = await api('POST', `backups/${encodeURIComponent(b.dataset.restore)}/restore`, { confirm: vals.confirm }); toast(`Restauration faite : ${r.restored} fiches remises, ${r.removed} retirées. Sécurité : ${r.safety}`, 8000); refresh(); } })));
+  mountNotifCard($('#notif-slot', v)).catch((e) => { const el = $('#notif-slot', v); if (el) el.innerHTML = `<div class="card"><h2>Notifications email</h2><p class="err">${esc(e.message)}</p></div>`; });
   $('#demo-load', v).onclick = async () => { if (!(await confirmBox('Charger des données d\'exemple (techniciens, chantiers, tâches… marqués « Exemple ») dans le logiciel ? Elles s\'ajoutent à vos vraies données, jusqu\'à ce que vous les effaciez.', 'Charger les exemples'))) return; await api('POST', 'demo'); toast('Données d\'exemple chargées'); refresh(); };
   $('#demo-clear', v).onclick = async () => { if (await confirmBox('Effacer toutes les données marquées « Exemple » ? Vos vraies données ne sont pas touchées.', 'Effacer')) { const r = await api('DELETE', 'demo'); toast(r.removed + ' éléments d\'exemple effacés'); refresh(); } };
 };
@@ -2818,6 +2996,407 @@ ROUTES.plus = async (v) => {
   paintStatus();
 };
 
+// ---------------- RGPD et outils DPO ----------------
+const rgpdDate = (d) => (d ? fmtD(d) : '–');
+ROUTES.rgpd = async (v) => {
+  if (!isAdmin()) { v.innerHTML = '<div class="card"><p>Le registre RGPD est réservé à l\'administrateur / DPO.</p></div>'; return; }
+  let treatments = [], requests = [], settings = { dpo: {}, processors: [] };
+  try {
+    [treatments, requests, settings] = await Promise.all([
+      api('GET', 'rgpd/treatments'), api('GET', 'rgpd/requests'), api('GET', 'rgpd/settings'),
+    ]);
+  } catch (e) { v.innerHTML = `<div class="card"><p class="err">${esc(e.message)}</p></div>`; return; }
+
+  const today = todayISO();
+  const warnsOf = (t) => {
+    const w = [];
+    if (!t.reviewAt) w.push('Revue non planifiée');
+    else if (t.reviewAt < today) w.push('Revue en retard');
+    if (t.risk === 'Élevé' && !t.aipd) w.push('AIPD à réaliser');
+    if (/hors\s*ue|etats?-unis|usa|inde|chine/i.test(t.transfers || '')) w.push('Transfert hors UE');
+    if (!t.owner) w.push('Responsable non désigné');
+    return w;
+  };
+  const lateReq = (r) => !['Traitée', 'Refusée', 'Clôturée'].includes(r.status) && r.dueAt && r.dueAt < today;
+  const openReq = requests.filter((r) => !['Traitée', 'Refusée', 'Clôturée'].includes(r.status));
+  const warnList = treatments.map((t) => ({ t, w: warnsOf(t) })).filter((x) => x.w.length);
+  const dpo = settings.dpo || {};
+  const processors = settings.processors || [];
+
+  v.innerHTML = `<div class="head">
+    <div><h1>Registre RGPD &amp; outils DPO <span class="muted small">(${treatments.length} traitements · ${requests.length} demandes)</span></h1>
+    <p class="muted small" style="margin:.3rem 0 0">Registre des activités de traitement (article 30), demandes d'exercice de droits et suivi des sous-traitants. Registre interne : à faire valider par votre conseil juridique.</p></div>
+    <div class="row"><button class="btn" id="rgpd-export">${ICON.doc} Export du registre</button><button class="btn primary" id="rgpd-new">${ICON.plus} Nouveau traitement</button></div>
+  </div>
+  <div class="grid g4 section">
+    ${kpi(treatments.filter((t) => t.status === 'Actif').length, 'Traitements actifs', '', '', { icon: 'shield', sub: `${processors.length} sous-traitants déclarés` })}
+    ${kpi(warnList.length, 'Points de vigilance', warnList.length ? 'warn' : 'ok', '', { icon: 'alert', sub: 'Revues, AIPD, transferts' })}
+    ${kpi(openReq.length, 'Demandes en cours', openReq.length ? 'warn' : 'ok', '', { icon: 'users', sub: 'Délai de réponse : 1 mois' })}
+    ${kpi(openReq.filter(lateReq).length, 'Demandes en retard', openReq.some(lateReq) ? 'red' : 'ok', '', { icon: 'clock', sub: 'Échéance dépassée' })}
+  </div>
+
+  <div class="card section">
+    <div class="head"><h2>${ICON.shield} Registre des traitements</h2><span class="muted small">Un traitement est archivé, jamais supprimé.</span></div>
+    <div class="table-wrap"><table data-sort><thead><tr><th>Traitement</th><th>Base légale</th><th>Personnes</th><th>Conservation</th><th>Risque</th><th>Revue</th><th>Statut</th><th>Vigilance</th><th data-nosort></th></tr></thead><tbody>
+    ${treatments.map((t) => `<tr>
+      <td><b>${esc(t.name)}</b><br><span class="muted small">${esc(t.purpose).slice(0, 90)}</span></td>
+      <td class="small">${esc(t.base || '–')}</td>
+      <td class="small">${esc(t.subjects || '–')}</td>
+      <td class="small">${esc(t.retention || '–')}</td>
+      <td>${`<span class="pill ${t.risk === 'Élevé' ? 'red' : t.risk === 'Moyen' ? 'orange' : 'green'}">${esc(t.risk || 'Faible')}</span>`}</td>
+      <td class="small">${rgpdDate(t.reviewAt)}${t.reviewAt && t.reviewAt < today ? ' <span class="pill red">retard</span>' : ''}</td>
+      <td>${`<span class="pill ${t.status === 'Actif' ? 'green' : t.status === 'À réviser' ? 'orange' : ''}">${esc(t.status)}</span>`}</td>
+      <td class="small">${warnsOf(t).map((w) => `<span class="pill orange">${esc(w)}</span>`).join(' ') || '<span class="pill green">À jour</span>'}</td>
+      <td><div class="row" style="gap:.3rem"><button class="btn sm" data-rgpd-edit="${esc(t.id)}">Ouvrir</button><button class="btn sm" data-rgpd-review="${esc(t.id)}">Revue</button></div></td>
+    </tr>`).join('') || `<tr><td colspan="9"><div class="empty">Aucun traitement au registre. Commencez par les plus évidents : paie, pointage, habilitations, dosage, vidéosurveillance.</div></td></tr>`}
+    </tbody></table></div>
+  </div>
+
+  <div class="grid g23 section">
+    <div class="card">
+      <div class="head"><h2>${ICON.users} Demandes d'exercice de droits</h2><button class="btn primary sm" id="rgpd-req-new">+ Enregistrer une demande</button></div>
+      <div class="table-wrap"><table data-sort><thead><tr><th>Reçue</th><th>Type</th><th>Personne</th><th>Échéance</th><th>Statut</th><th>Décision</th><th data-nosort></th></tr></thead><tbody>
+      ${requests.map((r) => `<tr>
+        <td class="small">${rgpdDate(r.receivedAt)}</td><td><b>${esc(r.type)}</b></td><td class="small">${esc(r.person)}${r.personRef ? `<br><span class="muted small">${esc(r.personRef)}</span>` : ''}</td>
+        <td class="small">${rgpdDate(r.dueAt)}${lateReq(r) ? ' <span class="pill red">en retard</span>' : (!['Traitée', 'Refusée', 'Clôturée'].includes(r.status) ? ' <span class="pill orange">J-' + daysUntil(r.dueAt) + '</span>' : '')}</td>
+        <td>${`<span class="pill ${['Traitée', 'Clôturée'].includes(r.status) ? 'green' : r.status === 'Refusée' ? 'red' : 'orange'}">${esc(r.status)}</span>`}</td>
+        <td class="small">${esc(r.decision || '–')}</td>
+        <td><button class="btn sm" data-rgpd-req="${esc(r.id)}">Traiter</button></td>
+      </tr>`).join('') || `<tr><td colspan="7"><div class="empty">Aucune demande enregistrée.</div></td></tr>`}
+      </tbody></table></div>
+    </div>
+    <div class="card">
+      <h2>${ICON.user} Délégué à la protection des données</h2>
+      <table style="margin-top:.5rem"><tr><th>DPO</th><td>${dpo.name ? esc(dpo.name) : '<span class="muted">Non désigné</span>'}</td></tr>
+      <tr><th>Contact</th><td>${dpo.email ? esc(dpo.email) : '<span class="muted">–</span>'}</td></tr>
+      <tr><th>Relais interne</th><td>${dpo.delegateName ? esc(dpo.delegateName) : '<span class="muted">–</span>'}</td></tr>
+      <tr><th>Autorité de contrôle</th><td>${esc(dpo.supervisoryAuthority || 'CNIL')}</td></tr></table>
+      <button class="btn" id="rgpd-dpo" style="margin-top:.6rem">Modifier les coordonnées et sous-traitants</button>
+      <p class="muted small" style="margin-top:.6rem">Sous-traitants (article 28) : ${processors.length ? processors.map((p) => esc(p.name) + (p.country ? ' (' + esc(p.country) + ')' : '')).join(' · ') : '<span class="muted">aucun déclaré</span>'}</p>
+    </div>
+  </div>`;
+
+  const tOpen = (t) => formModal({
+    title: t ? 'Traitement : ' + t.name : 'Nouveau traitement',
+    intro: '<p class="muted small">Renseignez la finalité, la base légale, les données et la durée de conservation. Une AIPD est nécessaire pour les traitements à risque élevé.</p>',
+    fields: [
+      { name: 'name', label: 'Nom du traitement', required: true, value: t?.name, placeholder: 'Paie et gestion du personnel' },
+      { name: 'purpose', label: 'Finalité (pourquoi ces données ?)', type: 'textarea', required: true, value: t?.purpose },
+      { name: 'base', label: 'Base légale', type: 'select', options: ['Contrat de travail', 'Obligation légale', 'Intérêt légitime', 'Consentement', 'Mission d\'intérêt public', 'Exécution d\'un contrat'], value: t?.base || 'Obligation légale' },
+      { name: 'subjects', label: 'Personnes concernées', value: t?.subjects, placeholder: 'Salariés, intérimaires, sous-traitants' },
+      { name: 'categories', label: 'Catégories de données', type: 'textarea', value: t?.categories, placeholder: 'Identité, coordonnées, contrat, pointage, habilitations' },
+      { name: 'recipients', label: 'Destinataires internes / externes', value: t?.recipients },
+      { name: 'processors', label: 'Sous-traitants (noms)', value: t?.processors, placeholder: 'Hébergeur, cabinet comptable' },
+      { name: 'retention', label: 'Durée de conservation', required: true, value: t?.retention, placeholder: '5 ans après la fin du contrat' },
+      { name: 'security', label: 'Mesures de sécurité', type: 'textarea', value: t?.security, placeholder: 'Comptes nominatifs, droits par rôle, journalisation, sauvegardes, chiffrement en transit' },
+      { name: 'transfers', label: 'Transferts hors Union européenne', value: t?.transfers },
+      { name: 'risk', label: 'Niveau de risque', type: 'select', options: ['Faible', 'Moyen', 'Élevé'], value: t?.risk || 'Faible' },
+      { name: 'aipd', label: 'Analyse d\'impact (AIPD) réalisée', type: 'select', options: [['0', 'Non'], ['1', 'Oui']], value: t?.aipd ? '1' : '0' },
+      { name: 'owner', label: 'Responsable du traitement / DPO', value: t?.owner },
+      { name: 'reviewAt', label: 'Prochaine revue', type: 'date', value: t?.reviewAt },
+      { name: 'status', label: 'Statut', type: 'select', options: ['Actif', 'À réviser', 'Archivé'], value: t?.status || 'Actif' },
+    ],
+    submitLabel: t ? 'Enregistrer' : 'Créer le traitement',
+    onSubmit: async (vals) => {
+      if (t) await api('PUT', 'rgpd/treatments/' + t.id, vals);
+      else await api('POST', 'rgpd/treatments', vals);
+      toast(t ? 'Traitement mis à jour' : 'Traitement ajouté au registre');
+      await render();
+    },
+  });
+  const rOpen = (r) => formModal({
+    title: r ? 'Demande de ' + r.type + ' – ' + r.person : 'Enregistrer une demande de droits',
+    intro: '<p class="muted small">Toute demande doit être traitée dans un délai d\'un mois. La décision et sa justification sont conservées.</p>',
+    fields: [
+      { name: 'type', label: 'Type de demande', type: 'select', options: ['Accès', 'Rectification', 'Effacement', 'Limitation', 'Opposition', 'Portabilité'], value: r?.type || 'Accès' },
+      { name: 'person', label: 'Personne concernée (nom ou référence)', required: true, value: r?.person },
+      { name: 'personRef', label: 'Référence interne (identifiant, fiche)', value: r?.personRef },
+      { name: 'channel', label: 'Reçue par', type: 'select', options: ['Email', 'Courrier', 'Téléphone', 'Sur place', 'Formulaire'], value: r?.channel || 'Email' },
+      { name: 'receivedAt', label: 'Date de réception', type: 'date', value: r?.receivedAt || todayISO() },
+      { name: 'status', label: 'Statut', type: 'select', options: ['Reçue', 'En cours', 'Traitée', 'Refusée', 'Clôturée'], value: r?.status || 'Reçue' },
+      { name: 'decision', label: 'Décision / réponse apportée', type: 'textarea', value: r?.decision },
+      { name: 'proof', label: 'Preuve (référence du courrier, capture, export)', value: r?.proof },
+      { name: 'notes', label: 'Notes internes', type: 'textarea', value: r?.notes },
+    ],
+    submitLabel: r ? 'Mettre à jour' : 'Enregistrer la demande',
+    onSubmit: async (vals) => {
+      if (r) await api('PUT', 'rgpd/requests/' + r.id, vals);
+      else await api('POST', 'rgpd/requests', vals);
+      toast(r ? 'Demande mise à jour' : 'Demande enregistrée');
+      await render();
+    },
+  });
+
+  const nb = $('#rgpd-new', v); if (nb) nb.onclick = () => tOpen(null);
+  $$('[data-rgpd-edit]', v).forEach((b) => (b.onclick = () => { const t = treatments.find((x) => x.id === b.dataset.rgpdEdit); if (t) tOpen(t); }));
+  $$('[data-rgpd-review]', v).forEach((b) => (b.onclick = async () => {
+    if (!(await confirmBox('Enregistrer la revue annuelle de ce traitement ? La prochaine revue sera fixée à un an.', 'Enregistrer la revue'))) return;
+    await api('POST', 'rgpd/treatments/' + b.dataset.rgpdReview, { review: true }); toast('Revue enregistrée'); render();
+  }));
+  const nq = $('#rgpd-req-new', v); if (nq) nq.onclick = () => rOpen(null);
+  $$('[data-rgpd-req]', v).forEach((b) => (b.onclick = () => { const r = requests.find((x) => x.id === b.dataset.rgpdReq); if (r) rOpen(r); }));
+  $('#rgpd-dpo', v).onclick = () => {
+    const box = document.createElement('div');
+    box.innerHTML = (processors.length ? processors : [{ name: '', purpose: '', country: '', guarantee: '' }]).map((p, i) => `<div class="proc" data-i="${i}" style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin-bottom:.5rem">
+      <input class="inp" data-p="name" placeholder="Nom du sous-traitant" value="${esc(p.name || '')}">
+      <input class="inp" data-p="purpose" placeholder="Prestation" value="${esc(p.purpose || '')}">
+      <input class="inp" data-p="country" placeholder="Pays d'hébergement" value="${esc(p.country || '')}">
+      <input class="inp" data-p="guarantee" placeholder="Garanties (contrat, clauses types)" value="${esc(p.guarantee || '')}">
+    </div>`).join('');
+    modal(`<h2>DPO et sous-traitants</h2><form id="dpo-form">
+      <label class="f">Nom du DPO<input name="name" value="${esc(dpo.name || '')}"></label>
+      <label class="f">Email du DPO<input name="email" type="email" value="${esc(dpo.email || '')}"></label>
+      <label class="f">Téléphone<input name="phone" value="${esc(dpo.phone || '')}"></label>
+      <label class="f">Adresse<input name="address" value="${esc(dpo.address || '')}"></label>
+      <label class="f">Relais interne (nom)<input name="delegateName" value="${esc(dpo.delegateName || '')}"></label>
+      <label class="f">Email du relais<input name="delegateEmail" type="email" value="${esc(dpo.delegateEmail || '')}"></label>
+      <label class="f">Autorité de contrôle<input name="supervisoryAuthority" value="${esc(dpo.supervisoryAuthority || 'CNIL')}"></label>
+      <label class="f">Lien vers le registre publié (facultatif)<input name="registryUrl" value="${esc(dpo.registryUrl || '')}"></label>
+      <div class="f"><b class="small">Sous-traitants (article 28)</b>${box.innerHTML}</div>
+      <p class="small muted">Un sous-traitant doit offrir des garanties suffisantes : contrat écrit, sécurité, confidentialité, assistance et restitution/suppression des données.</p>
+      <p class="err" data-err></p>
+      <div class="actions"><button type="button" class="btn" data-close>Annuler</button><button class="btn primary" type="submit">Enregistrer</button></div>
+    </form>`, (root, close) => {
+      $('#dpo-form', root).onsubmit = async (e) => {
+        e.preventDefault();
+        const f = e.target;
+        const dpoNext = {}; ['name', 'email', 'phone', 'address', 'delegateName', 'delegateEmail', 'supervisoryAuthority', 'registryUrl'].forEach((k) => { dpoNext[k] = f.elements[k].value.trim(); });
+        const list = $$('.proc', f).map((row) => { const o = {}; $$('[data-p]', row).forEach((i) => { o[i.dataset.p] = i.value.trim(); }); return o; }).filter((p) => p.name);
+        try { await api('PUT', 'rgpd/settings', { dpo: dpoNext, processors: list }); toast('Coordonnées DPO enregistrées'); close(); render(); }
+        catch (err) { $('[data-err]', root).textContent = err.message; }
+      };
+    });
+  };
+  $('#rgpd-export', v).onclick = async () => {
+    const data = await api('GET', 'rgpd/export');
+    download('registre-rgpd-' + todayISO() + '.json', new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
+    const rows = [['Traitement', 'Finalité', 'Base légale', 'Personnes', 'Données', 'Destinataires', 'Sous-traitants', 'Conservation', 'Sécurité', 'Transferts', 'Risque', 'AIPD', 'Responsable', 'Revue', 'Statut']];
+    treatments.forEach((t) => rows.push([t.name, t.purpose, t.base, t.subjects, t.categories, t.recipients, t.processors, t.retention, t.security, t.transfers, t.risk, t.aipd ? 'Oui' : 'Non', t.owner, t.reviewAt, t.status]));
+    download('registre-traitements-' + todayISO() + '.csv', new Blob([csv(rows)], { type: 'text/csv;charset=utf-8' }));
+    toast('Registre exporté (JSON et CSV)');
+  };
+  sortableTables(v);
+};
+
+// ---------------- Délégation d'accès par lien ----------------
+ROUTES.partages = async (v) => {
+  if (isTech()) { v.innerHTML = '<div class="card"><p>Les liens de délégation sont réservés à l\'encadrement.</p></div>'; return; }
+  let shares = [];
+  try { shares = await api('GET', 'shares'); } catch (e) { v.innerHTML = `<div class="card"><p class="err">${esc(e.message)}</p></div>`; return; }
+  const today = todayISO();
+  const state = (s) => s.revokedAt ? 'Révoqué' : (s.expiresAt && s.expiresAt < today ? 'Expiré' : (s.maxUses && s.uses >= s.maxUses ? 'Épuisé' : 'Actif'));
+  const active = shares.filter((s) => state(s) === 'Actif').length;
+  v.innerHTML = `<div class="head"><div><h1>Délégation d'accès par lien</h1>
+    <p class="muted small" style="margin:.3rem 0 0">Un lien donne accès à une seule fiche, en lecture seule, avec une durée et un nombre d'ouvertures limités. Aucun compte n'est créé et le lien se révoque à tout moment.</p></div>
+    <button class="btn primary" id="share-new">${ICON.plus} Créer un lien</button></div>
+  <div class="grid g4 section">
+    ${kpi(shares.length, 'Liens créés', '', '', { icon: 'send', sub: 'Toutes périodes' })}
+    ${kpi(active, 'Liens actifs', active ? 'ok' : '', '', { icon: 'check', sub: 'Utilisables maintenant' })}
+    ${kpi(shares.reduce((n, s) => n + (s.uses || 0), 0), 'Ouvertures', '', '', { icon: 'activity', sub: 'Consultations par lien' })}
+    ${kpi(shares.filter((s) => s.revokedAt).length, 'Révoqués', '', '', { icon: 'shield', sub: 'Accès coupés' })}
+  </div>
+  <div class="card section"><div class="table-wrap"><table data-sort><thead><tr><th>Fiche</th><th>Destinataire</th><th>Créé le</th><th>Expire le</th><th>Ouvertures</th><th>État</th><th data-nosort></th></tr></thead><tbody>
+  ${shares.map((s) => `<tr><td><b>${esc(s.label)}</b><br><span class="muted small">${esc(s.resource)} · ${esc(s.resourceId)}</span></td>
+    <td class="small">${esc(s.recipient || '–')}${s.note ? `<br><span class="muted small">${esc(s.note)}</span>` : ''}</td>
+    <td class="small">${fmtDT(s.createdAt)}</td><td class="small">${rgpdDate(s.expiresAt)}</td>
+    <td class="small">${s.uses || 0} / ${s.maxUses || '∞'}</td>
+    <td>${`<span class="pill ${state(s) === 'Actif' ? 'green' : state(s) === 'Révoqué' ? 'red' : 'orange'}">${state(s)}</span>`}</td>
+    <td><div class="row" style="gap:.3rem"><button class="btn sm" data-copy="${esc(s.token)}">Copier</button><button class="btn sm" data-open="${esc(s.token)}">Ouvrir</button>${!s.revokedAt ? `<button class="btn sm" data-revoke="${esc(s.token)}">Révoquer</button>` : ''}</div></td></tr>`).join('') || `<tr><td colspan="7"><div class="empty">Aucun lien. Créez-en un pour transmettre une fiche à un client, un exploitant ou un contrôleur sans lui donner de compte.</div></td></tr>`}
+  </tbody></table></div></div>`;
+
+  const linkOf = (t) => location.origin + '/partage?t=' + encodeURIComponent(t);
+  const copy = async (t) => {
+    const url = linkOf(t);
+    try { await navigator.clipboard.writeText(url); toast('Lien copié : ' + url, 6000); }
+    catch { modal(`<h2>Lien de délégation</h2><p class="small">Copiez ce lien et transmettez-le au destinataire :</p><input class="inp" value="${esc(url)}" readonly onclick="this.select()">`); }
+  };
+  const newShare = async () => {
+    let equipment = [], chantiers = [], documents = [];
+    try {
+      [equipment, chantiers, documents] = await Promise.all([
+        api('GET', 'equipment').catch(() => DF().equipment || []),
+        Promise.resolve(DF().chantiers || []),
+        Promise.resolve(DF().documents || []),
+      ]);
+    } catch { /* */ }
+    const options = [
+      ...((chantiers || []).map((c) => ['chantier:' + c.id, 'Chantier — ' + c.name])),
+      ...((equipment || []).map((e) => ['equipement:' + e.id, 'Équipement — ' + e.name + ' (' + e.id + ')'])),
+      ...((documents || []).map((d) => ['document:' + d.id, 'Document — ' + d.title + (d.ref ? ' (' + d.ref + ')' : '')])),
+    ];
+    formModal({
+      title: 'Créer un lien de délégation',
+      intro: '<p class="muted small">Le destinataire voit uniquement la fiche choisie, sans données personnelles sensibles ni montants. Le lien expire et se révoque.</p>',
+      fields: [
+        { name: 'fiche', label: 'Fiche à partager', type: 'select', options, required: true },
+        { name: 'recipient', label: 'Destinataire (nom / organisme)', value: '', placeholder: 'Client, exploitant réseau, contrôleur…' },
+        { name: 'days', label: 'Durée de validité (jours)', type: 'number', min: 1, max: 365, value: 7 },
+        { name: 'maxUses', label: 'Nombre maximum d\'ouvertures', type: 'number', min: 1, max: 500, value: 25 },
+        { name: 'note', label: 'Message pour le destinataire', type: 'textarea' },
+      ],
+      submitLabel: 'Créer le lien',
+      onSubmit: async (vals) => {
+        const [resource, resourceId] = String(vals.fiche).split(':');
+        const r = await api('POST', 'shares', { resource, resourceId, recipient: vals.recipient, days: vals.days, maxUses: vals.maxUses, note: vals.note });
+        await copy(r.token); render();
+      },
+    });
+  };
+  $('#share-new', v).onclick = newShare;
+  $$('[data-copy]', v).forEach((b) => (b.onclick = () => copy(b.dataset.copy)));
+  $$('[data-open]', v).forEach((b) => (b.onclick = () => window.open(linkOf(b.dataset.open), '_blank')));
+  $$('[data-revoke]', v).forEach((b) => (b.onclick = async () => {
+    if (!(await confirmBox('Révoquer ce lien ? Il ne fonctionnera plus immédiatement.', 'Révoquer'))) return;
+    await api('POST', 'shares/' + encodeURIComponent(b.dataset.revoke) + '/revoke'); toast('Lien révoqué'); render();
+  }));
+  sortableTables(v);
+};
+
+// ---------------- Stockage et synchronisation ----------------
+ROUTES.stockage = async (v) => {
+  let est = null;
+  try { est = await navigator.storage.estimate(); } catch { est = null; }
+  let cachesCount = 0, cacheBytes = 0;
+  try {
+    const names = await caches.keys();
+    cachesCount = names.length;
+    for (const n of names) { const c = await caches.open(n); const keys = await c.keys(); cacheBytes += keys.length; }
+  } catch { /* */ }
+  let server = null;
+  if (isAdmin()) { try { server = await api('GET', 'stats/storage'); } catch { server = null; } }
+  const mb = (b) => b == null ? '–' : (b > 1048576 ? (b / 1048576).toFixed(1) + ' Mo' : Math.round(b / 1024) + ' Ko');
+  const used = est ? est.usage : null, quota = est ? est.quota : null;
+  const pct = used && quota ? Math.min(100, (used / quota) * 100) : 0;
+  const queue = S.queue || [];
+  const last = S.lastSync ? fmtDT(S.lastSync) : '–';
+  const top = server ? Object.entries(server.collections).sort((a, b) => b[1].bytes - a[1].bytes).slice(0, 8) : [];
+  v.innerHTML = `<div class="head"><div><h1>Stockage et synchronisation</h1>
+    <p class="muted small" style="margin:.3rem 0 0">Ce que l'appareil garde hors ligne, ce qui attend l'envoi et ce que le serveur contient réellement.</p></div>
+    <button class="btn primary" id="sync-now">${ICON.activity} Synchroniser maintenant</button></div>
+  <div class="grid g4 section">
+    ${kpi(mb(used), 'Données locales', pct > 85 ? 'warn' : '', '', { icon: 'box', sub: quota ? 'sur ' + mb(quota) + ' disponibles' : 'estimation indisponible' })}
+    ${kpi(queue.length, 'En attente d\'envoi', queue.length ? 'warn' : 'ok', '', { icon: 'clock', sub: queue.length ? 'Hors ligne ou non confirmé' : 'Tout est envoyé' })}
+    ${kpi((S.rejected || []).length, 'Envois refusés', (S.rejected || []).length ? 'red' : 'ok', '#/envois', { icon: 'alert', sub: 'À vérifier un par un' })}
+    ${kpi(server ? server.totalRecords : '–', 'Fiches sur le serveur', '', '', { icon: 'globe', sub: server ? mb(server.totalBytes) + ' de données' : 'Réservé à l\'administrateur' })}
+  </div>
+  <div class="grid g23 section">
+    <div class="card"><h2>${ICON.box} Espace de l'appareil</h2>
+      <p class="muted small" style="margin:-.3rem 0 .9rem">Cache de l'application, copies hors ligne et file d'attente.</p>
+      <div class="bar" style="height:10px;background:#E8EEF7;border-radius:99px;overflow:hidden"><div style="height:100%;width:${pct.toFixed(1)}%;background:${pct > 85 ? '#E11D48' : '#2563EB'}"></div></div>
+      <p class="small" style="margin:.5rem 0 0">${used != null ? mb(used) + ' utilisés (' + pct.toFixed(1) + ' % du quota)' : 'Le navigateur ne fournit pas d\'estimation.'}</p>
+      <table style="margin-top:.8rem"><tr><th>Dernière synchronisation</th><td>${esc(last)}</td></tr>
+      <tr><th>File d'attente</th><td>${queue.length} action${queue.length > 1 ? 's' : ''}</td></tr>
+      <tr><th>Envois refusés</th><td>${(S.rejected || []).length}</td></tr>
+      <tr><th>Cache service worker</th><td>${cachesCount} espace${cachesCount > 1 ? 's' : ''} · ${cacheBytes} ressources</td></tr>
+      <tr><th>Mode</th><td>${navigator.onLine ? 'En ligne' : 'Hors ligne'}</td></tr></table>
+      <div class="row" style="margin-top:.8rem"><button class="btn" id="queue-detail">Voir la file d'attente</button><button class="btn" id="clear-local">Vider la copie locale</button></div>
+      <p class="muted small" style="margin-top:.6rem">La copie locale sert uniquement au hors ligne. La vider ne supprime aucune donnée du serveur ; reconnectez-vous pour la reconstituer.</p>
+    </div>
+    <div class="card"><h2>${ICON.globe} Volumétrie serveur</h2>
+      ${server ? `<p class="muted small" style="margin:-.3rem 0 .9rem">Mesurée le ${fmtDT(server.checkedAt)} : ${server.totalRecords} fiches, ${mb(server.totalBytes)}, ${server.historyEntries} entrées d'historique, ${server.photos} photos, ${server.backups} sauvegardes.</p>
+      <div class="list">${top.map(([c, x]) => `<div class="item"><span style="flex:1;min-width:0"><b>${esc(c)}</b><br><span class="muted small">${x.count} fiche${x.count > 1 ? 's' : ''}</span></span><span class="small">${mb(x.bytes)}</span></div>`).join('')}</div>
+      <p class="muted small">Les photos et l'historique sont stockés séparément, une clé par élément.</p>` : `<div class="empty">${ICON.shield}Les volumes détaillés sont visibles par l'administrateur.</div>`}
+    </div>
+  </div>`;
+  $('#sync-now', v).onclick = async () => {
+    if (!navigator.onLine) return toast('Hors ligne : la synchronisation reprendra à la reconnexion.');
+    await sendQueue(); await refresh(); toast('Synchronisation effectuée');
+  };
+  $('#clear-local', v).onclick = async () => {
+    if (!(await confirmBox('Vider la copie locale (cache de l\'appareil) ? Aucune donnée du serveur n\'est supprimée. Les actions en attente seront perdues : vérifiez qu\'il n\'y en a pas.', 'Vider la copie locale'))) return;
+    if ((S.queue || []).length) return toast('Des actions sont encore en attente : envoyez-les avant de vider.');
+    await idb.clear().catch(() => {});
+    try { const names = await caches.keys(); await Promise.all(names.map((n) => caches.delete(n))); } catch { /* */ }
+    toast('Copie locale vidée'); await refresh();
+  };
+  const qd = $('#queue-detail', v); if (qd) qd.onclick = () => modal(`<h2>File d'attente</h2>${queue.length ? `<div class="list">${queue.map((q) => `<div class="item"><span style="flex:1;min-width:0"><b>${esc(q.label || q.path)}</b><br><span class="muted small">${esc(q.method)} ${esc(q.path)} · ${fmtDT(q.at)}</span></span></div>`).join('')}</div>` : '<p class="muted">Aucune action en attente.</p>'}<div class="actions"><button class="btn" data-close>Fermer</button></div>`);
+  paintStatus();
+};
+
+// ---------------- Notifications email (carte des réglages) ----------------
+async function mountNotifCard(slot) {
+  let data = null;
+  try { data = await api('GET', 'notifications'); } catch (e) { slot.innerHTML = `<h2>${ICON.bell} Notifications email</h2><p class="err">${esc(e.message)}</p>`; return; }
+  const s = data.settings;
+  const last = (data.outbox || [])[0];
+  const stPill = (st) => `<span class="pill ${st === 'envoyé' ? 'green' : st === 'échec' ? 'red' : 'orange'}">${esc(st || '–')}</span>`;
+  slot.innerHTML = `<div class="head"><h2>${ICON.bell} Notifications email</h2>${stPill(data.configured ? (s.enabled ? 'activé' : 'prêt') : 'clé absente')}</div>
+    <p class="muted small">Synthèse quotidienne des alertes (habilitations, documents, maintenances, courriers, stocks, sauvegardes) envoyée aux destinataires choisis.</p>
+    <table><tr><th>État</th><td>${s.enabled ? '<span class="pill green">Activé</span>' : '<span class="pill">Désactivé</span>'} ${data.configured ? '' : '<span class="pill orange">RESEND_API_KEY absente : les messages sont enregistrés mais pas envoyés</span>'}</td></tr>
+    <tr><th>Destinataires</th><td>${s.recipients.length ? s.recipients.map(esc).join('<br>') : '<span class="muted">Aucun</span>'}</td></tr>
+    <tr><th>Expéditeur</th><td class="small">${esc(s.from || '–')}</td></tr>
+    <tr><th>Dernière synthèse</th><td class="small">${s.lastSentAt ? fmtDT(s.lastSentAt) + ' · ' + esc(s.lastStatus || '') : '–'}</td></tr></table>
+    <div class="row" style="margin-top:.6rem"><button class="btn" id="notif-conf">Configurer</button><button class="btn" id="notif-test">Envoyer un test</button><button class="btn dark" id="notif-digest">Envoyer la synthèse</button></div>
+    ${last ? `<p class="muted small" style="margin-top:.6rem">Dernier message : ${esc(last.subject)} — ${stPill(last.status)}${last.error ? ' · ' + esc(last.error) : ''}</p>` : ''}`;
+  $('#notif-conf', slot).onclick = () => formModal({
+    title: 'Notifications email',
+    intro: '<p class="muted small">L\'envoi utilise Resend. Sans clé API, rien n\'est envoyé : la synthèse reste consultable dans la boîte d\'envoi.</p>',
+    fields: [
+      { name: 'enabled', label: 'Synthèse quotidienne', type: 'select', options: [['0', 'Désactivée'], ['1', 'Activée']], value: s.enabled ? '1' : '0' },
+      { name: 'from', label: 'Expéditeur', value: s.from, placeholder: 'MIMOUNI Gestion <gestion@votre-domaine.fr>' },
+      { name: 'recipients', label: 'Destinataires (séparés par des virgules)', type: 'textarea', value: (s.recipients || []).join(', ') },
+      { name: 'hHab', label: 'Habilitations : prévenir X jours avant', type: 'number', min: 0, max: 365, value: s.horizon.habilitations },
+      { name: 'hDoc', label: 'Documents : prévenir X jours avant la revue', type: 'number', min: 0, max: 365, value: s.horizon.documents },
+      { name: 'hMnt', label: 'Maintenances : prévenir X jours avant', type: 'number', min: 0, max: 365, value: s.horizon.maintenances },
+      { name: 'aHab', label: 'Inclure les habilitations', type: 'select', options: [['0', 'Non'], ['1', 'Oui']], value: s.alerts.habilitations ? '1' : '0' },
+      { name: 'aDoc', label: 'Inclure la documentation', type: 'select', options: [['0', 'Non'], ['1', 'Oui']], value: s.alerts.documents ? '1' : '0' },
+      { name: 'aMnt', label: 'Inclure les maintenances', type: 'select', options: [['0', 'Non'], ['1', 'Oui']], value: s.alerts.maintenances ? '1' : '0' },
+      { name: 'aFlow', label: 'Inclure les courriers', type: 'select', options: [['0', 'Non'], ['1', 'Oui']], value: s.alerts.courriers ? '1' : '0' },
+      { name: 'aStock', label: 'Inclure les stocks', type: 'select', options: [['0', 'Non'], ['1', 'Oui']], value: s.alerts.stocks ? '1' : '0' },
+      { name: 'aBackup', label: 'Inclure les sauvegardes', type: 'select', options: [['0', 'Non'], ['1', 'Oui']], value: s.alerts.sauvegardes ? '1' : '0' },
+    ],
+    submitLabel: 'Enregistrer',
+    onSubmit: async (vals) => {
+      await api('PUT', 'notifications', {
+        enabled: vals.enabled === '1', from: vals.from, recipients: vals.recipients,
+        horizon: { habilitations: Number(vals.hHab), documents: Number(vals.hDoc), maintenances: Number(vals.hMnt) },
+        alerts: { habilitations: vals.aHab === '1', documents: vals.aDoc === '1', maintenances: vals.aMnt === '1', courriers: vals.aFlow === '1', stocks: vals.aStock === '1', sauvegardes: vals.aBackup === '1' },
+      });
+      toast('Réglages de notifications enregistrés'); mountNotifCard(slot);
+    },
+  });
+  $('#notif-test', slot).onclick = async () => {
+    const r = await api('POST', 'notifications/test', {});
+    toast(r.status === 'envoyé' ? 'Message de test envoyé à ' + r.to : 'Test non envoyé : ' + (r.error || r.status), 7000);
+    mountNotifCard(slot);
+  };
+  $('#notif-digest', slot).onclick = async () => {
+    const r = await api('POST', 'notifications/digest', {});
+    toast('Synthèse : ' + (r.status || '') + ' — ' + (r.total ?? 0) + ' point(s)', 7000);
+    mountNotifCard(slot);
+  };
+}
+
+// ---------------- Page publique d'un lien de délégation ----------------
+async function tryPublicShare() {
+  if (!/^\/partage\/?$/.test(location.pathname)) return false;
+  const app = $('#app');
+  const token = new URLSearchParams(location.search).get('t') || '';
+  const shell = (html) => { app.innerHTML = `<div style="max-width:900px;margin:0 auto;padding:1.2rem">${html}</div>`; };
+  if (!token) { shell(`<div class="card"><h1>Lien incomplet</h1><p>Ce lien ne contient pas de jeton. Demandez un nouveau lien à votre interlocuteur.</p></div>`); return true; }
+  shell('<div class="card"><p>Chargement de la fiche…</p></div>');
+  try {
+    const r = await fetch('/api/public/share/' + encodeURIComponent(token));
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.error || 'Lien indisponible.');
+    const p = d.payload || {};
+    const fields = (p.fields || []).map(([l, v]) => `<tr><th>${esc(l)}</th><td>${esc(v)}</td></tr>`).join('');
+    const tasks = (p.tasks || []).length ? `<div class="card section"><h2>Tâches en cours</h2><div class="table-wrap"><table><thead><tr><th>Tâche</th><th>Statut</th><th>Échéance</th></tr></thead><tbody>${p.tasks.map((t) => `<tr><td>${esc(t.title)}</td><td>${esc(t.status)}</td><td>${t.due ? esc(fmtD(t.due)) : '–'}</td></tr>`).join('')}</tbody></table></div></div>` : '';
+    const link = p.link ? `<p style="margin-top:.8rem"><a class="btn" href="${esc(p.link)}" target="_blank" rel="noopener noreferrer">Ouvrir le fichier</a></p>` : '';
+    shell(`<div class="card section" style="display:flex;gap:.7rem;align-items:center"><span class="brand-mark" style="background:#0B2440;color:#fff;border-radius:10px;width:40px;height:40px;display:grid;place-items:center">${ICON.bolt}</span><div><b>MIMOUNI INDUSTRIEL ÉLECTRICITÉ</b><br><span class="muted small">Fiche transmise en lecture seule</span></div></div>
+      <div class="card section"><div class="head"><div><h1 style="margin-bottom:.2rem">${esc(p.title || d.label)}</h1><p class="muted small" style="margin:0">${esc(d.resource)} · référence ${esc(p.reference || '')}</p></div><span class="pill">Lecture seule</span></div>
+      ${d.recipient ? `<p class="small">Destinataire : <b>${esc(d.recipient)}</b></p>` : ''}
+      ${d.note ? `<div class="notice small">${esc(d.note)}</div>` : ''}
+      <div class="table-wrap"><table><tbody>${fields}</tbody></table></div>${link}</div>
+      ${tasks}
+      <div class="card section"><p class="muted small" style="margin:0">Lien créé le ${esc(fmtDT(d.createdAt))}, valable jusqu'au ${esc(fmtD(d.expiresAt))} · ${d.uses || 0} ouverture(s) sur ${d.maxUses || '∞'}. Aucune donnée personnelle sensible ni montant n'est transmis. Ce lien peut être révoqué à tout moment par son créateur.</p></div>`);
+    document.title = (p.title || 'Fiche partagée') + ' — MIMOUNI';
+  } catch (e) {
+    shell(`<div class="card section"><h1>Lien indisponible</h1><p>${esc(e.message)}</p><p class="muted small">Si le lien a expiré, demandez-en un nouveau à votre interlocuteur.</p></div>`);
+  }
+  return true;
+}
+
 function initAI() {
   if (document.getElementById('ai-btn')) return;
   const btn = document.createElement('button');
@@ -2960,4 +3539,240 @@ ${context}` },
   if (low.includes('technicien') || low.includes('employé')) return `Vous avez ${d.technicians.length} techniciens.`;
   if (low.includes('chantier')) return `Il y a ${d.chantiers.length} chantier(s).`;
   return 'Je peux vous aider sur les techniciens, chantiers et absences.';
+}
+
+// ---------------- Étiquettes QR (génération et impression en lot) ----------------
+const ETQ_FORMATS = {
+  '24': { label: 'Planche A4 — 24 étiquettes (3 × 8)', cols: 3, rows: 8 },
+  '12': { label: 'Planche A4 — 12 étiquettes (2 × 6)', cols: 2, rows: 6 },
+  '6': { label: 'Planche A4 — 6 étiquettes (2 × 3)', cols: 2, rows: 3 },
+  '1': { label: 'Étiquette seule (50 × 30 mm)', cols: 1, rows: 1 },
+};
+ROUTES.etiquettes = async (v) => {
+  if (!isAdmin()) { v.innerHTML = '<div class="card"><p>La génération des étiquettes QR est réservée à l\'administrateur.</p></div>'; return; }
+  const all = (DF().equipment || []).slice().sort((a, b) => String(a.id).localeCompare(String(b.id)));
+  const q = (PL.etqQ || '').toLowerCase();
+  const fs = PL.etqSite || '';
+  const list = all.filter((e) => (!q || (e.name + ' ' + e.id + ' ' + (e.type || '')).toLowerCase().includes(q)) && (!fs || (e.siteId || siteOfChantier(e.chantierId)) === fs));
+  const sel = new Set(PL.etqSel || []);
+  const disabled = all.filter((e) => e.qrDisabled).length;
+  const printed = all.filter((e) => e.labelPrints).length;
+  v.innerHTML = `<div class="head"><div><h1>Étiquettes QR <span class="muted small">(${all.length} équipements)</span></h1>
+    <p class="muted small" style="margin:.3rem 0 0">Chaque étiquette porte un lien permanent vers la fiche. Sélectionnez les équipements, choisissez la planche, imprimez ou enregistrez le QR en image.</p></div>
+    <div class="row"><button class="btn" id="etq-verify">${ICON.shield} Vérifier les liens</button><button class="btn primary" id="etq-print">${ICON.doc} Imprimer la sélection</button></div></div>
+  <div class="grid g4 section">
+    ${kpi(all.length, 'Étiquettes disponibles', '', '', { icon: 'box', sub: `${new Set(all.map((e) => e.siteId || siteOfChantier(e.chantierId))).size} site(s)` })}
+    ${kpi(sel.size, 'Sélection', sel.size ? 'ok' : '', '', { icon: 'check', sub: 'Étiquettes à imprimer' })}
+    ${kpi(printed, 'Déjà imprimées', '', '', { icon: 'doc', sub: `${all.reduce((n, e) => n + (e.labelPrints || 0), 0)} impressions` })}
+    ${kpi(disabled, 'QR désactivés', disabled ? 'red' : 'ok', '', { icon: 'alert', sub: 'Étiquettes à remplacer' })}
+  </div>
+  <div class="card section">
+    <div class="toolbar">
+      <input class="inp" id="etq-q" placeholder="Rechercher un équipement…" value="${esc(PL.etqQ || '')}">
+      <select class="inp" id="etq-site" aria-label="Filtrer par site"><option value="">Tous les sites</option>${sitesList().map((s) => `<option value="${esc(s.id)}" ${fs === s.id ? 'selected' : ''}>${esc(s.name)}</option>`).join('')}</select>
+      <select class="inp" id="etq-format" aria-label="Format d'impression">${Object.entries(ETQ_FORMATS).map(([k, f]) => `<option value="${k}" ${(PL.etqFormat || '24') === k ? 'selected' : ''}>${esc(f.label)}</option>`).join('')}</select>
+      <button class="btn sm" id="etq-all">Tout sélectionner</button>
+      <button class="btn sm" id="etq-none">Vider</button>
+    </div>
+    <div class="table-wrap"><table data-sort><thead><tr><th data-nosort></th><th>Code</th><th>Désignation</th><th>Site</th><th>État QR</th><th>Impressions</th><th data-nosort></th></tr></thead><tbody>
+    ${list.map((e) => `<tr><td><input type="checkbox" data-etq-pick="${esc(e.id)}" ${sel.has(e.id) ? 'checked' : ''} aria-label="Sélectionner ${esc(e.id)}"></td>
+      <td><b>${esc(e.id)}</b></td><td>${esc(e.name)}${demoTag(e)}</td><td>${sitePill(e.siteId || siteOfChantier(e.chantierId)) || '–'}</td>
+      <td>${e.qrDisabled ? '<span class="pill red">Désactivé</span>' : '<span class="pill green">Actif</span>'}</td>
+      <td class="small">${e.labelPrints ? e.labelPrints : '–'}${e.lastLabelAt ? `<br><span class="muted small">${esc(fmtD(e.lastLabelAt))}</span>` : ''}</td>
+      <td><div class="row" style="gap:.3rem"><button class="btn sm" data-etq-one="${esc(e.id)}">Aperçu</button><button class="btn sm" data-etq-png="${esc(e.id)}">PNG</button><button class="btn sm" data-etq-link="${esc(e.id)}">Lien</button></div></td></tr>`).join('') || `<tr><td colspan="7" class="muted">Aucun équipement ne correspond au filtre.</td></tr>`}
+    </tbody></table></div>
+    <p class="muted small" style="margin:.7rem 0 0">${list.length} étiquette(s) affichée(s) · l'impression en lot est enregistrée dans le journal, étiquette par étiquette.</p>
+  </div>
+  <div class="card section"><h2>${ICON.doc} Aperçu</h2><div id="etq-preview" style="padding:1rem 0"></div></div>`;
+  const saveSel = () => { PL.etqSel = [...sel]; };
+  $$('[data-etq-pick]', v).forEach((c) => (c.onchange = () => {
+    if (c.checked) sel.add(c.dataset.etqPick); else sel.delete(c.dataset.etqPick);
+    saveSel(); render();
+  }));
+  const qi = $('#etq-q', v); if (qi) qi.oninput = (ev) => { PL.etqQ = ev.target.value; clearTimeout(PL.etqT); PL.etqT = setTimeout(() => render().then(() => { const i = $('#etq-q'); if (i) { i.focus(); i.setSelectionRange(i.value.length, i.value.length); } }), 300); };
+  const si = $('#etq-site', v); if (si) si.onchange = () => { PL.etqSite = si.value; render(); };
+  const fi = $('#etq-format', v); if (fi) fi.onchange = () => { PL.etqFormat = fi.value; };
+  $('#etq-all', v).onclick = () => { list.forEach((e) => sel.add(e.id)); saveSel(); render(); };
+  $('#etq-none', v).onclick = () => { sel.clear(); saveSel(); render(); };
+  $$('[data-etq-one]', v).forEach((b) => (b.onclick = () => {
+    const e = all.find((x) => x.id === b.dataset.etqOne); if (!e) return;
+    $('#etq-preview', v).innerHTML = `<div class="label-preview">${labelHTML(e)}</div><p class="muted small">Lien encodé : <a href="${esc(equipURL(e.id))}" target="_blank" rel="noopener noreferrer">${esc(equipURL(e.id))}</a></p>`;
+  }));
+  $$('[data-etq-png]', v).forEach((b) => (b.onclick = () => {
+    const e = all.find((x) => x.id === b.dataset.etqPng); if (!e) return;
+    try {
+      const qr = qrcode(0, 'M'); qr.addData(equipURL(e.id)); qr.make();
+      const url = qr.createDataURL(12, 4);
+      const a = document.createElement('a'); a.href = url; a.download = 'qr-' + e.id + '.png'; a.click();
+      toast('QR enregistré : ' + e.id);
+    } catch (err) { toast('Génération impossible : ' + err.message); }
+  }));
+  $$('[data-etq-link]', v).forEach((b) => (b.onclick = async () => {
+    const e = all.find((x) => x.id === b.dataset.etqLink); if (!e) return;
+    try { await navigator.clipboard.writeText(equipURL(e.id)); toast('Lien copié'); }
+    catch { modal(`<h2>Lien de l'étiquette</h2><input class="inp" readonly value="${esc(equipURL(e.id))}" onclick="this.select()">`); }
+  }));
+  $('#etq-verify', v).onclick = async () => {
+    const bad = [];
+    for (const e of all) {
+      const id = new URL(equipURL(e.id)).pathname.split('/').pop();
+      const expected = 'EQ-' + String(e.id).replace(/^EQ-/, '');
+      if (id !== expected) bad.push(e.id);
+    }
+    const dead = all.filter((e) => e.qrDisabled);
+    toast(`Vérification : ${all.length - bad.length} lien(s) conforme(s), ${bad.length} anomalie(s), ${dead.length} QR désactivé(s).`, 8000);
+    if (bad.length) modal(`<h2>Liens non conformes</h2><p class="small">Ces étiquettes doivent être réimprimées :</p><ul>${bad.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>`);
+  };
+  $('#etq-print', v).onclick = async () => {
+    const chosen = list.filter((e) => sel.has(e.id));
+    if (!chosen.length) return toast('Sélectionnez au moins un équipement.');
+    const fmt = PL.etqFormat || '24';
+    if (fmt === '1' && chosen.length === 1) return printLabel(chosen[0]);
+    printSheet(chosen, ETQ_FORMATS[fmt]);
+    try {
+      await api('POST', 'equipment/labels', { ids: chosen.map((e) => e.id), format: fmt });
+      await loadData();
+      toast(`${chosen.length} étiquette(s) imprimée(s) et enregistrée(s) dans le journal`, 6000);
+    } catch (err) { toast('Impression faite, enregistrement impossible : ' + err.message, 7000); }
+  };
+  sortableTables(v);
+};
+
+// Impression d'une planche : iframe isolée, pour ne pas dépendre des styles de l'écran.
+function printSheet(equips, fmt) {
+  const per = fmt.cols * fmt.rows;
+  const sheets = [];
+  for (let i = 0; i < equips.length; i += per) sheets.push(equips.slice(i, i + per));
+  const cellW = (186 / fmt.cols).toFixed(2);
+  const body = sheets.map((group) => `<div class="sheet" style="display:grid;grid-template-columns:repeat(${fmt.cols},${cellW}mm);grid-auto-rows:30mm;gap:4mm;page-break-after:always">${group.map((e) => `<div class="lbl" style="width:50mm;height:30mm;display:flex;gap:1.5mm;padding:1.5mm;border:.2mm dashed #999;box-sizing:border-box;overflow:hidden">
+      <div style="width:27mm;height:27mm;flex:none">${qrSVG(equipURL(e.id), 3)}</div>
+      <div style="display:flex;flex-direction:column;justify-content:space-between;min-width:0">
+        <div style="font-size:5pt;font-weight:900;line-height:1.1">MIMOUNI INDUSTRIEL ÉLECTRICITÉ</div>
+        <div style="font-size:6.3pt;font-weight:700;line-height:1.12;max-height:3.2em;overflow:hidden">${esc(e.name)}</div>
+        <div style="font-size:8pt;font-weight:900;font-family:'Courier New',monospace">${esc(e.id)}</div>
+      </div></div>`).join('')}</div>`).join('');
+  const html = `<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Étiquettes QR MIMOUNI</title><style>
+    @page{size:A4;margin:6mm}
+    body{margin:0;font-family:system-ui,Arial,sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    .sheet{break-after:page}
+    svg{width:100%;height:100%;display:block}
+  </style></head><body>${body}</body></html>`;
+  const f = document.createElement('iframe');
+  f.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;';
+  document.body.appendChild(f);
+  f.onload = () => {
+    try { f.contentWindow.focus(); f.contentWindow.print(); } catch (e) { toast('Impression bloquée par le navigateur : ' + e.message); }
+    setTimeout(() => f.remove(), 60000);
+  };
+  f.srcdoc = html;
+}
+
+// ---------------- Preuves et traçabilité ----------------
+const PREUVE_ENTITIES = [['', 'Tous les objets'], ['équipement', 'Équipements'], ['chantier', 'Chantiers'], ['document', 'Documents'], ['courrier', 'Courriers'], ['maintenance', 'Maintenances'], ['technicien', 'Techniciens'], ['pointage', 'Pointages'], ['absence', 'Absences'], ['signalement', 'Signalements'], ['partage', 'Liens de délégation'], ['preuve', 'Preuves'], ['sauvegarde', 'Sauvegardes'], ['notification', 'Notifications'], ['rgpd', 'RGPD']];
+ROUTES.preuves = async (v) => {
+  if (!isAdmin()) { v.innerHTML = '<div class="card"><p>La vérification des preuves est réservée à l\'administrateur.</p></div>'; return; }
+  let s = null;
+  try { s = await api('GET', 'preuves'); } catch (e) { v.innerHTML = `<div class="card"><p class="err">${esc(e.message)}</p></div>`; return; }
+  const from = PL.prFrom || todayISO().slice(0, 4) + '-01-01';
+  const to = PL.prTo || todayISO();
+  const entity = PL.prEntity || '';
+  const actor = PL.prActor || '';
+  v.innerHTML = `<div class="head"><div><h1>Preuves et traçabilité</h1>
+    <p class="muted small" style="margin:.3rem 0 0">Le journal est chaîné : chaque entrée porte l'empreinte de son contenu et la référence de la précédente. Une modification ou une suppression casse la chaîne et devient visible ici.</p></div>
+    <div class="row"><button class="btn" id="pr-verify">${ICON.shield} Vérifier l'intégrité</button><button class="btn primary" id="pr-pack">${ICON.doc} Constituer un paquet de preuve</button></div></div>
+  <div class="grid g4 section">
+    ${kpi(s.entries, 'Entrées du journal', '', '', { icon: 'list', sub: s.legacy ? s.legacy + ' antérieure(s) à la chaîne' : 'Toutes chaînées' })}
+    ${kpi(s.intact ? 'Intègre' : s.anomalies.length + ' anomalie(s)', 'État de la chaîne', s.intact ? 'ok' : 'red', '', { icon: s.intact ? 'check' : 'alert', sub: s.intact ? (s.ruptures.length ? s.ruptures.length + ' rupture(s) de maillon' : 'Aucune altération détectée') : 'Contenu altéré : à analyser' })}
+    ${kpi(s.firstAt ? fmtD(s.firstAt) : '–', 'Première entrée', '', '', { icon: 'clock', sub: s.lastAt ? 'Dernière : ' + fmtD(s.lastAt) : '' })}
+    ${kpi(s.byWho.length, 'Acteurs tracés', '', '', { icon: 'users', sub: s.byWho[0] ? s.byWho[0].key + ' : ' + s.byWho[0].count : '–' })}
+  </div>
+  ${(s.anomalies.length || s.ruptures.length) ? `<div class="card section" style="border-left:4px solid #E11D48"><h2>${ICON.alert} Points à analyser</h2><div class="table-wrap"><table><thead><tr><th>Date</th><th>Action</th><th>Nature</th><th>Entrée</th></tr></thead><tbody>${[...s.anomalies, ...s.ruptures].slice(0, 25).map((a) => `<tr><td class="small">${esc(fmtDT(a.at))}</td><td>${esc(a.action || '–')}</td><td><span class="pill ${a.type === 'empreinte' ? 'red' : 'orange'}">${a.type === 'empreinte' ? 'contenu altéré' : 'maillon rompu'}</span></td><td class="small">${esc(a.key)}</td></tr>`).join('')}</tbody></table></div>
+    <p class="muted small">Un contenu altéré est grave : comparer avec la sauvegarde correspondante. Un maillon rompu peut venir d'une entrée antérieure au chaînage, d'une restauration de sauvegarde ou de deux écritures simultanées entre deux instances serveur. Dans ce dernier cas, aucune donnée n'est perdue : l'entrée reste lisible et son empreinte est valide.</p></div>` : ''}
+  <div class="grid g23 section">
+    <div class="card"><h2>${ICON.list} Dernières actions</h2>
+      <div class="table-wrap"><table><thead><tr><th>Date</th><th>Acteur</th><th>Action</th><th>Objet</th><th>Détail</th></tr></thead><tbody>
+      ${(s.last || []).map((e) => `<tr><td class="small">${esc(fmtDT(e.at))}</td><td class="small">${esc(e.who || '–')}</td><td class="small">${esc(e.action || '–')}</td><td class="small">${esc(e.entity || '')}${e.id ? ' · ' + esc(e.id) : ''}</td><td class="small">${esc(e.detail || '–')}</td></tr>`).join('') || '<tr><td colspan="5" class="muted">Journal vide.</td></tr>'}
+      </tbody></table></div>
+    </div>
+    <div class="card"><h2>${ICON.user} Répartition</h2>
+      <h3 style="font-size:.9rem;margin:.4rem 0">Par acteur</h3>
+      <div class="list">${s.byWho.slice(0, 6).map((x) => `<div class="item"><span style="flex:1;min-width:0">${esc(x.key)}</span><b class="small">${x.count}</b></div>`).join('') || '<div class="empty">–</div>'}</div>
+      <h3 style="font-size:.9rem;margin:.9rem 0 .4rem">Par objet</h3>
+      <div class="list">${s.byEntity.slice(0, 6).map((x) => `<div class="item"><span style="flex:1;min-width:0">${esc(x.key)}</span><b class="small">${x.count}</b></div>`).join('') || '<div class="empty">–</div>'}</div>
+    </div>
+  </div>
+  <div class="card section"><h2>${ICON.doc} Périmètre du paquet de preuve</h2>
+    <div class="toolbar"><label class="f" style="margin:0">Du<input class="inp" type="date" id="pr-from" value="${esc(from)}"></label>
+      <label class="f" style="margin:0">Au<input class="inp" type="date" id="pr-to" value="${esc(to)}"></label>
+      <select class="inp" id="pr-entity" aria-label="Objet">${PREUVE_ENTITIES.map(([k, l]) => `<option value="${esc(k)}" ${entity === k ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select>
+      <input class="inp" id="pr-actor" placeholder="Acteur (identifiant)" value="${esc(actor)}"></div>
+    <p class="muted small">Le paquet contient les entrées de la période, l'état de la chaîne et l'identité de son auteur. Il est lui-même inscrit au journal.</p>
+  </div>
+  <div class="card section"><h2>${ICON.doc} Trace d'une fiche</h2>
+    <div class="toolbar"><select class="inp" id="tr-type">${PREUVE_ENTITIES.filter(([k]) => k && k !== 'preuve' && k !== 'sauvegarde' && k !== 'notification').map(([k, l]) => `<option value="${esc(k)}" ${k === 'équipement' ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select>
+      <input class="inp" id="tr-id" placeholder="Identifiant exact (ex. EQ-AB12CD, DOC-123456)" style="flex:1">
+      <button class="btn dark" id="tr-go">Afficher la trace</button></div>
+    <div id="tr-out"></div>
+  </div>`;
+  const bindPr = (id, key) => { const el = $('#' + id, v); if (el) el.onchange = () => { PL[key] = el.value; render(); }; };
+  bindPr('pr-from', 'prFrom'); bindPr('pr-to', 'prTo'); bindPr('pr-entity', 'prEntity');
+  const ac = $('#pr-actor', v); if (ac) ac.onchange = () => { PL.prActor = ac.value; };
+  $('#pr-verify', v).onclick = async () => {
+    const r = await api('GET', 'preuves/verify');
+    toast(r.intact ? `Contenus intègres : ${r.checked} entrées vérifiées${r.legacy ? ', ' + r.legacy + ' antérieure(s) au chaînage' : ''}${r.ruptures.length ? ', ' + r.ruptures.length + ' maillon(s) rompu(s)' : ''}.` : `${r.anomalies.length} contenu(s) altéré(s) : à analyser sans délai.`, 9000);
+    render();
+  };
+  $('#pr-pack', v).onclick = async () => {
+    const qs = new URLSearchParams({ from, to });
+    if (entity) qs.set('entity', entity);
+    if (actor) qs.set('actor', actor);
+    const bundle = await api('GET', 'preuves/export?' + qs.toString());
+    download(`paquet-preuves-${todayISO()}.json`, new Blob([JSON.stringify(bundle, null, 2)], { type: 'application/json' }));
+    const rows = [['Date', 'Acteur', 'Rôle', 'Action', 'Objet', 'Identifiant', 'Détail', 'Empreinte']];
+    bundle.entries.forEach((e) => rows.push([e.at, e.who, e.role, e.action, e.entity, e.id, e.detail, (e.hash || '').slice(0, 16)]));
+    download(`paquet-preuves-${todayISO()}.csv`, new Blob([csv(rows)], { type: 'text/csv;charset=utf-8' }));
+    toast(`${bundle.entries.length} entrée(s) exportée(s), contenus ${bundle.verification.intact ? 'intègres' : 'altérés'}`, 8000);
+    await preuvePDF(bundle);
+  };
+  $('#tr-go', v).onclick = async () => {
+    const type = $('#tr-type', v).value; const id = $('#tr-id', v).value.trim();
+    if (!id) return toast('Saisissez un identifiant.');
+    const out = $('#tr-out', v); out.innerHTML = '<p class="muted small">Recherche…</p>';
+    try {
+      const r = await api('GET', 'preuves/trace/' + encodeURIComponent(type) + '/' + encodeURIComponent(id));
+      out.innerHTML = r.entries.length ? `<p class="muted small">${r.entries.length} action(s) sur ${esc(type)} ${esc(id)}</p><div class="list">${r.entries.slice().reverse().map((e) => `<div class="item"><span style="flex:1;min-width:0"><b>${esc(e.action)}</b><br><span class="muted small">${esc(fmtDT(e.at))} · ${esc(e.who || '–')}${e.detail ? ' · ' + esc(e.detail) : ''}</span></span><span class="pill">${esc((e.hash || '').slice(0, 8) || 'hors chaîne')}</span></div>`).join('')}</div>` : `<div class="empty">Aucune action trouvée pour cet identifiant.</div>`;
+    } catch (err) { out.innerHTML = `<p class="err">${esc(err.message)}</p>`; }
+  };
+};
+async function preuvePDF(bundle) {
+  try {
+    await loadScript('/vendor/jspdf.umd.min.js');
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+    const W = 210, M = 15; let y = 0;
+    doc.setFillColor(17, 17, 17); doc.rect(0, 0, W, 24, 'F');
+    doc.setFillColor(200, 16, 46); doc.rect(0, 24, W, 2, 'F');
+    doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'bold'); doc.setFontSize(14);
+    doc.text('MIMOUNI INDUSTRIEL ÉLECTRICITÉ', M, 12);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.text('Attestation de traçabilité', M, 18.5);
+    doc.setTextColor(17, 17, 17); y = 34;
+    doc.setFontSize(10);
+    doc.text('Paquet de preuve établi le ' + new Date().toLocaleString('fr-FR'), M, y); y += 7;
+    doc.text('Période : ' + (bundle.criteria.from || 'origine') + ' au ' + (bundle.criteria.to || 'aujourd\'hui'), M, y); y += 7;
+    doc.text('Objet : ' + (bundle.criteria.entity || 'tous les objets') + ' · Acteur : ' + (bundle.criteria.actor || 'tous'), M, y); y += 10;
+    doc.setFont('helvetica', 'bold');
+    doc.text(bundle.verification.intact ? 'Chaîne d\'intégrité : INTÈGRE' : 'Chaîne d\'intégrité : ANOMALIES DÉTECTÉES', M, y); y += 7;
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(9);
+    doc.text(bundle.verification.checked + ' entrées vérifiées, ' + bundle.verification.legacy + ' antérieure(s) au chaînage, ' + bundle.verification.anomalies.length + ' anomalie(s).', M, y); y += 10;
+    doc.text('Extrait des dernières entrées :', M, y); y += 6;
+    doc.setFontSize(8);
+    bundle.entries.slice(-28).forEach((e) => {
+      if (y > 275) { doc.addPage(); y = 20; }
+      doc.text(String(e.at || '').slice(0, 16) + '  ' + String(e.who || '').slice(0, 18) + '  ' + String(e.action || '').slice(0, 46), M, y); y += 5;
+    });
+    if (y > 250) { doc.addPage(); y = 20; }
+    doc.setFontSize(8); doc.setTextColor(90, 90, 90);
+    doc.text('Document généré automatiquement à partir du journal chaîné. Il ne remplace pas une preuve judiciaire contradictoire.', M, 285);
+    doc.save(`attestation-tracabilite-${todayISO()}.pdf`);
+  } catch (e) { toast('PDF non généré : ' + e.message); }
 }

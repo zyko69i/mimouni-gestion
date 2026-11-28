@@ -11,6 +11,12 @@
   to = "/index.html"
   status = 200
 
+# Page publique d'un lien de délégation : /partage?t=<jeton>
+[[redirects]]
+  from = "/partage"
+  to = "/index.html"
+  status = 200
+
 [[headers]]
   for = "/*"
   [headers.values]

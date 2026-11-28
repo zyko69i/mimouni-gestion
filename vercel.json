@@ -15,6 +15,10 @@
     {
       "source": "/e/:id*",
       "destination": "/index.html"
+    },
+    {
+      "source": "/partage",
+      "destination": "/index.html"
     }
   ],
   "headers": [
