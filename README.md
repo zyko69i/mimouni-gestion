@@ -20,3 +20,13 @@ présences et absences, matériel avec QR codes permanents, scanner, historique 
 - **QR codes** : création, régénération (versionnée), désactivation et réactivation réservées au webmaster (administrateur) ; le lien permanent de la fiche ne change pas. Un QR code n'est ni une autorisation d'utilisation ni une preuve de conformité.
 - **Tableau de bord** : documents à réviser, maintenances à traiter, signalements ouverts, contrôles d'équipements, en plus des chantiers, présences, habilitations et heures.
 - **Remplaçants suggérés** sur les absences : même site, même métier, disponibilité et habilitations couvertes, en suggestion indicative validée par le chef d'équipe.
+
+## Modules ajoutés (V1.5 – V1.6)
+
+- **Conformité** : statut calculé et statut déclaré des habilitations, justificatif obligatoire, refus serveur des affectations non conformes (chantiers critiques), dérogation QHSE écrite et limitée dans le temps.
+- **Parc et frais** : carburant, entretien et contrôles véhicules, barèmes versionnés (source, justificatif, validateur), déplacements et frais calculés avec le barème en vigueur.
+- **Sécurité et conformité** : DICT/DT, consignation / déconsignation / VAT, CACES, sous-traitants et plans de prévention, dosimétrie (admin seul), signatures électroniques scellées (SHA-256, ajout seul).
+- **Ressources humaines** : évolution professionnelle, récompenses, anniversaires et ancienneté, export complet d'une fiche (JSON et PDF).
+- **Stocks** et avertissements visibles par module.
+- Registres : `netlify/lib/registres.mjs` (règles métier côté serveur, lignes jamais effacées, corrections journalisées avant / après).
+- Les sauvegardes couvrent désormais toutes les collections ; une ancienne sauvegarde ne supprime pas les collections qu'elle ne contient pas.

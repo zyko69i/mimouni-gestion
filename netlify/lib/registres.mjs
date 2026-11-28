@@ -1,6 +1,6 @@
 // Registres d'exploitation : carburant, entretien véhicules, barèmes versionnés,
 // déplacements et frais, stocks. Contrôle d'accès, journalisation et règles métier côté serveur.
-import { randomBytes } from 'node:crypto';
+import { randomBytes, createHash } from 'node:crypto';
 import * as db from './db.mjs';
 
 const H = { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' };
@@ -44,6 +44,36 @@ export const REG = {
     F('kmDeclared', 'n'), F('kmEstimated', 'n'), F('gapReason', 's', { max: 300 }), F('nights', 'n'), F('meals', 'n'), F('lodgingCost', 'n'), F('otherCost', 'n'),
     F('advance', 'n'), F('alreadyPaid', 'n'), F('proof', 's', { max: 200 }), F('status', 'e', { options: TRIP_STATUS }), F('refusalReason', 's', { max: 300 }),
   ] },
+  caces: { label: 'CACES et autorisations de conduite', write: ['admin', 'chef'], read: ['admin', 'chef'], fields: [
+    F('techId', 's', { max: 40, req: true }), F('category', 's', { max: 80, req: true }), F('issued', 'd'), F('expires', 'd', { req: true }), F('org', 's', { max: 100 }),
+    F('medicalUntil', 'd'), F('employerAuth', 's', { max: 100 }), F('proof', 's', { max: 200 }), F('declared', 'e', { options: ['à vérifier', 'confirmé', 'suspendu', 'retiré', 'en attente'] }),
+  ] },
+  dict: { label: 'DICT / DT', write: ['admin', 'chef'], read: ['admin', 'chef'], fields: [
+    F('chantierId', 's', { max: 40, req: true }), F('type', 'e', { options: ['DT', 'DICT', 'DT-DICT conjointe'], req: true }), F('sentOn', 'd'), F('responseDue', 'd'),
+    F('receivedOn', 'd'), F('operator', 's', { max: 120 }), F('proof', 's', { max: 200 }), F('workStart', 'd'), F('status', 'e', { options: ['À envoyer', 'Envoyée', 'Réponse reçue', 'Réponse incomplète', 'Clôturée'] }), F('notes', 's', { max: 500 }),
+  ] },
+  consignation: { label: 'Consignation / déconsignation / VAT', write: ['admin', 'chef'], read: ['admin', 'chef'], fields: [
+    F('chantierId', 's', { max: 40 }), F('equipment', 's', { max: 150, req: true }), F('consignerId', 's', { max: 40, req: true }), F('procedure', 's', { max: 100 }),
+    F('separation', 'b'), F('condamnation', 'b'), F('identification', 'b'), F('vat', 'b'), F('vatProof', 's', { max: 200 }),
+    F('status', 'e', { options: ['Préparée', 'Consigné', 'Déconsigné', 'Annulée'] }), F('deconsignerId', 's', { max: 40 }), F('notes', 's', { max: 500 }),
+  ] },
+  dosimetrie: { label: 'Dosimétrie et radioprotection', write: ['admin'], read: ['admin'], fields: [
+    F('techId', 's', { max: 40, req: true }), F('date', 'd', { req: true }), F('dose', 'n', { req: true }), F('siteId', 's', { max: 40 }),
+    F('threshold', 'n'), F('medicalUntil', 'd'), F('dosimeter', 's', { max: 60 }), F('proof', 's', { max: 200 }),
+  ] },
+  soustraitants: { label: 'Sous-traitants et plans de prévention', write: ['admin', 'chef'], read: ['admin', 'chef'], fields: [
+    F('name', 's', { max: 120, req: true }), F('siret', 's', { max: 20 }), F('contact', 's', { max: 120 }), F('domain', 's', { max: 120 }), F('chantierId', 's', { max: 40 }),
+    F('planRef', 's', { max: 100 }), F('planSigned', 'd'), F('planExpires', 'd'), F('insuranceExpires', 'd'), F('urssafExpires', 'd'), F('habProof', 's', { max: 200 }),
+    F('status', 'e', { options: ['À qualifier', 'Autorisé', 'Suspendu', 'Refusé'] }),
+  ] },
+  recompenses: { label: 'Reconnaissance et récompenses', write: ['admin'], read: ['admin'], fields: [
+    F('techId', 's', { max: 40, req: true }), F('type', 'e', { options: ['Médaille du travail', 'Prime d\'ancienneté', 'Prime exceptionnelle', 'Félicitations', 'Autre'], req: true }),
+    F('date', 'd', { req: true }), F('years', 'n'), F('amount', 'n'), F('reason', 's', { max: 300 }), F('status', 'e', { options: ['Proposée', 'Validée', 'Refusée', 'Remise'] }), F('refusalReason', 's', { max: 300 }),
+  ] },
+  evolution: { label: 'Évolution professionnelle', write: ['admin'], read: ['admin', 'chef'], fields: [
+    F('techId', 's', { max: 40, req: true }), F('date', 'd', { req: true }), F('event', 'e', { options: ['Embauche', 'Changement de poste', 'Promotion', 'Formation suivie', 'Nouvelle qualification', 'Entretien annuel', 'Changement de site', 'Autre'], req: true }),
+    F('title', 's', { max: 150 }), F('level', 's', { max: 60 }), F('notes', 's', { max: 800 }),
+  ] },
   stock: { label: 'Stocks et consommables', write: ['admin', 'chef'], read: ['admin', 'chef'], fields: [
     F('name', 's', { max: 120, req: true }), F('ref', 's', { max: 60 }), F('siteId', 's', { max: 40 }), F('unit', 's', { max: 20 }),
     F('qty', 'n'), F('minQty', 'n'), F('location', 's', { max: 100 }), F('supplier', 's', { max: 100 }),
@@ -57,6 +87,7 @@ function clean(spec, body, prev = {}) {
     if (f.type === 's') out[f.key] = str(body[f.key], f.max || 300);
     else if (f.type === 'd') out[f.key] = dt(body[f.key]);
     else if (f.type === 'n') out[f.key] = nb(body[f.key]);
+    else if (f.type === 'b') out[f.key] = body[f.key] === true || body[f.key] === 'true' || body[f.key] === '1';
     else if (f.type === 'e') out[f.key] = f.options.includes(body[f.key]) ? body[f.key] : (prev[f.key] ?? f.options[0]);
   }
   return out;
@@ -102,6 +133,7 @@ async function tripCompute(t) {
 }
 
 export async function handleRegistre({ user, m, r1, r2: id, body, log }) {
+  if (r1 === 'signatures') return handleSignatures({ user, m, id, body, log });
   const spec = REG[r1];
   if (!spec) return json(404, { error: 'Registre inconnu.' });
   if (!spec.read.includes(user.role)) return json(403, { error: 'Action non autorisée pour votre profil.' });
@@ -146,9 +178,72 @@ export async function handleRegistre({ user, m, r1, r2: id, body, log }) {
     if (rec.status === 'refusé' && !rec.refusalReason) return json(400, { error: 'Un refus doit comporter un motif.' });
     if (['transmis à la comptabilité', 'payé'].includes(rec.status) && !(prev && ['validé', 'transmis à la comptabilité'].includes(prev.status))) return json(400, { error: 'Ce statut exige une validation préalable.' });
   }
+  if (coll === 'caces') {
+    const n = rec.expires ? Math.round((new Date(rec.expires + 'T00:00:00Z') - new Date(new Date().toISOString().slice(0, 10) + 'T00:00:00Z')) / 864e5) : null;
+    rec.calculated = n !== null && n < 0 ? 'expiré' : !rec.proof ? 'sans justificatif' : n !== null && n <= 90 ? 'à échéance proche' : 'valide';
+    rec.compliant = ['valide', 'à échéance proche'].includes(rec.calculated) && rec.declared === 'confirmé' && (!rec.medicalUntil || rec.medicalUntil >= new Date().toISOString().slice(0, 10));
+  }
+  if (coll === 'dict') {
+    if (rec.status === 'Clôturée' && !rec.receivedOn) return json(400, { error: 'Une DICT/DT ne peut être clôturée sans réponse de l\'exploitant reçue.' });
+    if (rec.workStart && !rec.receivedOn) rec.warnings = ['Travaux prévus sans réponse de l\'exploitant enregistrée : démarrage à ne pas autoriser.'];
+    rec.late = !!(rec.responseDue && !rec.receivedOn && rec.responseDue < new Date().toISOString().slice(0, 10));
+  }
+  if (coll === 'consignation') {
+    const steps = rec.separation && rec.condamnation && rec.identification && rec.vat;
+    if (rec.status === 'Consigné' && !steps) return json(400, { error: 'Consignation impossible : séparation, condamnation, identification et VAT doivent être réalisées et cochées.' });
+    if (rec.status === 'Consigné' && !rec.vatProof) return json(400, { error: 'La vérification d\'absence de tension (VAT) doit être justifiée.' });
+    if (rec.status === 'Déconsigné') {
+      if (!(prev && (prev.status === 'Consigné' || prev.status === 'Déconsigné'))) return json(400, { error: 'Déconsignation impossible sans consignation préalable.' });
+      if (!rec.deconsignerId) return json(400, { error: 'Le responsable de déconsignation est obligatoire.' });
+    }
+    if (prev && prev.status === 'Déconsigné' && rec.status !== 'Déconsigné') return json(400, { error: 'Une déconsignation réalisée ne peut pas être annulée.' });
+  }
+  if (coll === 'dosimetrie') {
+    const from = new Date(new Date(rec.date + 'T00:00:00Z').getTime() - 365 * 864e5).toISOString().slice(0, 10);
+    const others = (await db.list('dosimetrie')).filter((x) => x.id !== rec.id && x.techId === rec.techId && x.date >= from && x.date <= rec.date);
+    rec.cumul12m = r2(others.reduce((a, x) => a + (x.dose || 0), 0) + (rec.dose || 0));
+    rec.warnings = [];
+    if (rec.threshold && rec.cumul12m >= rec.threshold) rec.warnings.push('Cumul 12 mois (' + rec.cumul12m + ' mSv) au-delà du seuil interne saisi.');
+    else if (rec.threshold && rec.cumul12m >= rec.threshold * 0.8) rec.warnings.push('Cumul 12 mois à plus de 80 % du seuil interne saisi.');
+  }
+  if (coll === 'soustraitants') {
+    const today = new Date().toISOString().slice(0, 10);
+    rec.warnings = [];
+    if (!rec.planRef) rec.warnings.push('Plan de prévention absent');
+    for (const [k, l] of [['planExpires', 'Plan de prévention'], ['insuranceExpires', 'Assurance'], ['urssafExpires', 'Attestation de vigilance']]) { if (!rec[k]) rec.warnings.push(l + ' : date non renseignée'); else if (rec[k] < today) rec.warnings.push(l + ' expiré(e)'); }
+    if (rec.status === 'Autorisé' && rec.warnings.length) return json(400, { error: 'Autorisation impossible : ' + rec.warnings.join(' ; ') + '.' });
+  }
+  if (coll === 'recompenses') {
+    if (rec.status === 'Refusée' && !rec.refusalReason) return json(400, { error: 'Un refus doit comporter un motif.' });
+    if (['Validée', 'Remise'].includes(rec.status) && !rec.reason) return json(400, { error: 'Le motif ou la base de calcul est obligatoire avant validation.' });
+  }
   if (coll === 'stock') { rec.low = rec.minQty > 0 && rec.qty <= rec.minQty; }
   await db.put(coll, rec.id, rec);
   const diff = prev ? spec.fields.filter((f) => String(prev[f.key] ?? '') !== String(rec[f.key] ?? '')).map((f) => f.key + ': ' + (prev[f.key] ?? '') + ' → ' + (rec[f.key] ?? '')).join(' ; ') : '';
   await log(user, prev ? spec.label + ' modifié' : spec.label + ' créé', coll, rec.id, diff || (rec.name || rec.vehicleId || rec.techId || ''));
   return json(200, rec);
+}
+
+// ---------- Signature électronique (Partie 34) : ajout seul, empreinte SHA-256, horodatage serveur ----------
+const SIGN_TYPES = ['Prise en charge / restitution véhicule', 'Plan de prévention', 'Autorisation de travail', 'Remise de matériel', 'Consignation', 'Autre'];
+const fingerprint = (o) => createHash('sha256').update(JSON.stringify([o.type, o.title, o.content, o.refId, o.signedAt, o.signers.map((x) => [x.name, x.role, createHash('sha256').update(x.image).digest('hex')])])).digest('hex');
+async function handleSignatures({ user, m, id, body, log }) {
+  if (!['admin', 'chef'].includes(user.role)) return json(403, { error: 'Action non autorisée pour votre profil.' });
+  if (m === 'GET' && !id) return json(200, (await db.list('signatures')).map(({ signers, ...x }) => ({ ...x, signers: signers.map((s) => ({ name: s.name, role: s.role })) })).sort((a, b) => b.signedAt.localeCompare(a.signedAt)));
+  if (m === 'GET' && id) {
+    const x = await db.get('signatures', id); if (!x) return json(404, { error: 'Introuvable.' });
+    return json(200, { ...x, integrity: fingerprint(x) === x.hash ? 'intègre' : 'ALTÉRÉ' });
+  }
+  if (m !== 'POST' || id) return json(403, { error: 'Un document signé ne se modifie ni ne s\'efface : il se remplace par un nouveau document signé.' });
+  const signers = (Array.isArray(body.signers) ? body.signers : []).slice(0, 4).map((x) => ({ name: str(x.name, 100), role: str(x.role, 60), image: str(x.image, 400000) })).filter((x) => x.name && /^data:image\/png;base64,/.test(x.image));
+  const type = SIGN_TYPES.includes(body.type) ? body.type : 'Autre';
+  const title = str(body.title, 150), content = str(body.content, 4000);
+  if (!title) return json(400, { error: 'Le titre du document est obligatoire.' });
+  if (type === 'Prise en charge / restitution véhicule' && signers.length < 2) return json(400, { error: 'Prise en charge / restitution : la signature des deux parties est obligatoire.' });
+  if (signers.length < 1) return json(400, { error: 'Au moins une signature manuscrite est obligatoire.' });
+  const rec = { id: rid(), type, title, content, refId: str(body.refId, 60), signedAt: now(), signers, createdBy: user.login };
+  rec.hash = fingerprint(rec);
+  await db.put('signatures', rec.id, rec);
+  await log(user, 'document signé', 'signature', rec.id, type + ' — ' + title + ' — ' + signers.map((x) => x.name).join(', ') + ' — empreinte ' + rec.hash.slice(0, 16));
+  return json(200, { id: rec.id, hash: rec.hash, signedAt: rec.signedAt });
 }
