@@ -1,0 +1,136 @@
+# Diagnostic et réparation de la configuration Vercel, sans passer par l'interface.
+#
+# Prérequis : le secret de dépôt VERCEL_TOKEN (Settings → Secrets and variables → Actions).
+# Déclenchement manuel : Actions → « Vérifier la configuration Vercel » → Run workflow.
+#
+# Mode « diagnostic » : affiche la liste des variables d'environnement (noms seuls),
+#   sans jamais en révéler les valeurs.
+# Mode « reparer » : ajoute MIMOUNI_ADMIN_HASH en production si elle manque, puis
+#   redéploie et contrôle que l'API ne renvoie plus d'erreur 500.
+name: Vérifier la configuration Vercel
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "diagnostic ou reparer"
+        type: choice
+        options: [diagnostic, reparer]
+        default: diagnostic
+      admin_hash:
+        description: "Hash scrypt du mot de passe admin (vide = valeur par défaut du dépôt)"
+        type: string
+        required: false
+
+concurrency:
+  group: verif-vercel
+  cancel-in-progress: false
+
+jobs:
+  verifier:
+    name: Configuration
+    runs-on: ubuntu-latest
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      PROJET: mimouni-industriel-electricite
+      PORTEE: mimo
+      SITE: https://mimouni-industriel-electricite.vercel.app
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Jeton présent ?
+        run: |
+          if [ -z "${VERCEL_TOKEN}" ]; then
+            echo "::error::Secret VERCEL_TOKEN absent : ajoutez-le dans Settings → Secrets and variables → Actions."
+            exit 1
+          fi
+
+      - name: Installer la CLI Vercel
+        run: npm install --global vercel@latest
+
+      - name: Lier le projet
+        run: |
+          if [ -n "${VERCEL_ORG_ID}" ]; then
+            vercel link --yes --project "$PROJET" --token "$VERCEL_TOKEN"
+          else
+            vercel link --yes --project "$PROJET" --scope "$PORTEE" --token "$VERCEL_TOKEN"
+          fi
+
+      - name: Lister les variables de production
+        run: |
+          echo "### Variables d'environnement (production)" >> "$GITHUB_STEP_SUMMARY"
+          vercel env ls production --token "$VERCEL_TOKEN" 2>&1 | tee /tmp/env.txt
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          cat /tmp/env.txt >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Contrôler la présence des variables attendues
+        run: |
+          attendues="MIMOUNI_TOKEN_SECRET MIMOUNI_ADMIN_HASH SUPABASE_URL SUPABASE_SERVICE_ROLE_KEY BLOB_READ_WRITE_TOKEN"
+          echo "### Contrôle" >> "$GITHUB_STEP_SUMMARY"
+          for v in $attendues; do
+            if grep -q "$v" /tmp/env.txt; then
+              echo "- présent : $v" >> "$GITHUB_STEP_SUMMARY"
+            else
+              echo "- absent : $v" >> "$GITHUB_STEP_SUMMARY"
+            fi
+          done
+          if ! grep -q "MIMOUNI_TOKEN_SECRET" /tmp/env.txt; then
+            echo "### ⚠️" >> "$GITHUB_STEP_SUMMARY"
+            echo "MIMOUNI_TOKEN_SECRET manque : la connexion renverra « Erreur serveur » même avec le bon mot de passe." >> "$GITHUB_STEP_SUMMARY"
+          fi
+          if ! grep -qE "SUPABASE_URL|BLOB_READ_WRITE_TOKEN" /tmp/env.txt; then
+            echo "### ⚠️ stockage" >> "$GITHUB_STEP_SUMMARY"
+            echo "Aucun stockage configuré : toute lecture en base échoue (erreur 500)." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Ajouter MIMOUNI_ADMIN_HASH si absente
+        if: ${{ inputs.mode == 'reparer' }}
+        env:
+          HASH_DEFAUT: 'scrypt$16384$82c33605d59fe985e483ee1101b7cc0b$4ca9cb898c9ea2bc3c515d0cb00d16fe7cdbdf5b95bea8cf273581b554a1500c4709164855756704ae773510671c0ae912eeada07307b963b18367b00f9350dc'
+          HASH_INPUT: ${{ inputs.admin_hash }}
+        run: |
+          if grep -q "MIMOUNI_ADMIN_HASH" /tmp/env.txt; then
+            echo "MIMOUNI_ADMIN_HASH déjà présente : aucune écriture."
+            echo "- MIMOUNI_ADMIN_HASH : déjà présente (inchangée)" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          VALEUR="${HASH_INPUT:-$HASH_DEFAUT}"
+          printf '%s' "$VALEUR" | vercel env add MIMOUNI_ADMIN_HASH production --token "$VERCEL_TOKEN"
+          echo "- MIMOUNI_ADMIN_HASH : ajoutée en production" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Redéployer en production
+        if: ${{ inputs.mode == 'reparer' }}
+        run: |
+          vercel pull --yes --environment=production --token "$VERCEL_TOKEN"
+          vercel build --prod --token "$VERCEL_TOKEN"
+          vercel deploy --prebuilt --prod --yes --token "$VERCEL_TOKEN"
+
+      - name: Contrôler l'API après déploiement
+        run: |
+          sleep 5
+          sante=$(curl -s -o /dev/null -w '%{http_code}' "$SITE/api/health")
+          echo "health : HTTP $sante"
+          code=$(curl -s -o /tmp/login.json -w '%{http_code}' -X POST "$SITE/api/login" \
+            -H 'Content-Type: application/json' -d '{"login":"admin","password":"sonde-invalide"}')
+          echo "login (mot de passe volontairement faux) : HTTP $code"
+          cat /tmp/login.json
+          {
+            echo "### Résultat de la sonde"
+            echo "- /api/health : HTTP $sante"
+            echo "- /api/login (mot de passe faux) : HTTP $code"
+            echo '```'
+            cat /tmp/login.json
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          # 401 = base joignable, mot de passe refusé (attendu). 500 = configuration cassée.
+          if [ "$code" = "500" ]; then
+            echo "::error::La connexion renvoie 500 : la couche de stockage est encore mal configurée."
+            exit 1
+          fi
