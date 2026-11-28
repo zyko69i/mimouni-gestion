@@ -1,95 +1,47 @@
-# Déploiement en production sur Vercel à chaque push sur main.
-#
-# Secrets à créer dans GitHub (Settings → Secrets and variables → Actions) :
-#   VERCEL_TOKEN        jeton personnel Vercel (vercel.com/account/tokens), portée équipe « mimo »
-#   VERCEL_ORG_ID       identifiant de l'équipe (facultatif)
-#   VERCEL_PROJECT_ID   prj_ERK7JweSTYzoc2yRouFgmaonoyC (facultatif)
-#
-# Tant que VERCEL_TOKEN est absent, le workflow se contente de vérifier le code
-# et n'essaie pas de déployer : aucun échec inutile dans l'historique.
-name: Déploiement Vercel
+name: Vérification du code
 
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 concurrency:
-  group: deploiement-production
+  group: controle-code-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   verifier:
-    name: Contrôles
+    name: Structure et syntaxe
     runs-on: ubuntu-latest
-    outputs:
-      pret: ${{ steps.jeton.outputs.pret }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - name: Récupérer le dépôt
+        uses: actions/checkout@v4
+
+      - name: Installer Node.js
+        uses: actions/setup-node@v4
         with:
-          node-version: 20
-      - name: Contrôle hors ligne de la couche Supabase
-        run: node tests/supabase-smoke.mjs
-      - name: Jeton présent ?
-        id: jeton
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          node-version: 22
+          cache: npm
+
+      - name: Installer les dépendances
+        run: npm ci
+
+      - name: Vérifier les fichiers, ressources PWA et routes Vercel
+        run: npm run check:code
+
+      - name: Vérifier la syntaxe JavaScript
+        shell: bash
         run: |
-          if [ -n "${VERCEL_TOKEN}" ]; then
-            echo "pret=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "pret=false" >> "$GITHUB_OUTPUT"
-            echo "Secret VERCEL_TOKEN absent : déploiement non déclenché." >> "$GITHUB_STEP_SUMMARY"
-          fi
+          set -euo pipefail
+          node --check public/app.js
+          node --check scripts/check-code.mjs
+          find api netlify -type f \\( -name '*.mjs' -o -name '*.js' \\) -print0 | xargs -0 -r -n1 node --check
 
-  deployer:
-    name: Production
-    needs: verifier
-    if: needs.verifier.outputs.pret == 'true'
-    runs-on: ubuntu-latest
-    env:
-      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-      PROJET: mimouni-industriel-electricite
-      PORTEE: mimo
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
-      - name: Installer la CLI Vercel
-        run: npm install --global vercel@latest
-
-      - name: Lier le projet
-        run: |
-          if [ -n "${VERCEL_ORG_ID}" ]; then
-            vercel link --yes --project "$PROJET" --token "$VERCEL_TOKEN"
-          else
-            vercel link --yes --project "$PROJET" --scope "$PORTEE" --token "$VERCEL_TOKEN"
-          fi
-
-      - name: Préparer la production
-        run: vercel pull --yes --environment=production --token "$VERCEL_TOKEN"
-
-      - name: Construire
-        run: vercel build --prod --token "$VERCEL_TOKEN"
-
-      - name: Déployer
-        id: deploiement
-        run: |
-          URL=$(vercel deploy --prebuilt --prod --yes --token "$VERCEL_TOKEN")
-          echo "url=$URL" >> "$GITHUB_OUTPUT"
-          echo "Déployé : $URL" >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Vérifier la réponse du site
-        run: |
-          for i in 1 2 3 4 5 6; do
-            code=$(curl -s -o /dev/null -w '%{http_code}' https://mimouni-industriel-electricite.vercel.app/)
-            echo "essai $i : HTTP $code"
-            [ "$code" = "200" ] && exit 0
-            sleep 10
-          done
-          exit 1
+# Le projet Vercel est relié au dépôt GitHub : Vercel crée les déploiements
+# Preview/Production à partir des commits. Ce workflow vérifie le code sans
+# dépendre d'un ancien token Vercel ni lancer un second déploiement concurrent.
