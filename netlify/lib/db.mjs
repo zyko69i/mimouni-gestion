@@ -67,6 +67,9 @@ async function listKeys(prefix) {
 async function getMany(keys) {
   const out = [];
   const s = store();
+  // Supabase sait lire plusieurs clés en une requête (in) : évite N allers-retours
+  // quand une collection ou l'historique compte des milliers d'entrées.
+  if (typeof s.getMany === 'function') return s.getMany(keys);
   const CHUNK = 40;
   for (let i = 0; i < keys.length; i += CHUNK) {
     const part = await Promise.all(keys.slice(i, i + CHUNK).map((k) => s.get(k, { type: 'json' })));

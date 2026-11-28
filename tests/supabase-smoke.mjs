@@ -23,7 +23,10 @@ const server = http.createServer(async (req, res) => {
     let out = [...rows.values()];
     const eq = keyOf();
     const like = u.searchParams.get('key');
-    if (eq !== null) out = out.filter((r) => r.key === eq);
+    if (like && like.startsWith('in.(')) {
+      const wanted = like.slice(4, -1).split(',').map((x) => x.replace(/^"|"$/g, '').replace(/\\"/g, '"'));
+      out = out.filter((r) => wanted.includes(r.key));
+    } else if (eq !== null) out = out.filter((r) => r.key === eq);
     else if (like && like.startsWith('like.')) {
       const raw = like.slice(5).replace(/\\/g, '');
       const p = raw.replace(/([.+?^${}()|[\]\\])/g, '\\$1').replace(/%/g, '.*');
@@ -95,6 +98,11 @@ assert.ok(pagesJournal >= 2, 'listage par pages');
 const users = [];
 for await (const page of s.list({ prefix: 'users/' })) users.push(...page.blobs.map((b) => b.key));
 assert.deepEqual(users, ['users/u1']);
+
+const many = await s.getMany(['journal/20260101-0001', 'journal/20260101-0002', 'absent/x']);
+assert.deepEqual(many, [{ i: 1 }, { i: 2 }], 'lecture en lot');
+const none = await s.getMany([]);
+assert.deepEqual(none, []);
 
 await s.delete('users/u1');
 assert.equal(await s.get('users/u1', { type: 'json' }), null);

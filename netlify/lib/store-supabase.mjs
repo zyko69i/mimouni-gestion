@@ -59,6 +59,25 @@ export function supabaseStore() {
       return write(key, { doc: null, txt: String(value) }, o.onlyIfNew);
     },
 
+    // Lecture en lot : une requête pour plusieurs clés (chunks de 100).
+    async getMany(keys) {
+      const c = conf();
+      const out = [];
+      const CHUNK = 100;
+      for (let i = 0; i < keys.length; i += CHUNK) {
+        const list = keys.slice(i, i + CHUNK).map((k) => `"${String(k).replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`).join(',');
+        const r = await fetch(`${c.url}?select=key,doc,txt&key=in.(${encodeURIComponent(list)})`, { headers: headers(c.key) });
+        if (!r.ok) throw new Error(`Supabase getMany ${r.status} : ${await r.text()}`);
+        const rows = await r.json();
+        const byKey = new Map(rows.map((row) => [row.key, row]));
+        for (const k of keys.slice(i, i + CHUNK)) {
+          const v = await readOne(k, byKey.get(k));
+          if (v !== null) out.push(v);
+        }
+      }
+      return out;
+    },
+
     async delete(key) {
       const c = conf();
       const r = await fetch(`${c.url}?key=eq.${enc(key)}`, { method: 'DELETE', headers: headers(c.key) });
