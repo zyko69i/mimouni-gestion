@@ -30,3 +30,11 @@
    Relancer avec `--simulation` d'abord pour un simple décompte.
 5. **Déploiement** : `VERCEL_TOKEN=… ./scripts/deployer-vercel.sh` (ou liaison du dépôt GitHub au projet Vercel pour les déploiements automatiques).
 6. **Contrôle** : connexion administrateur, ouverture d'un chantier, pointage, export CSV, page `#/preuves` (chaîne d'intégrité) et `#/stockage` (volumétrie).
+
+## Déploiement automatique par GitHub Actions
+
+`.github/workflows/deploy-vercel.yml` déploie en production à chaque push sur `main`.
+
+- Secrets du dépôt (Settings → Secrets and variables → Actions) : `VERCEL_TOKEN` (obligatoire), `VERCEL_ORG_ID` et `VERCEL_PROJECT_ID` (`prj_ERK7JweSTYzoc2yRouFgmaonoyC`, facultatifs).
+- Sans `VERCEL_TOKEN`, le workflow lance seulement le contrôle hors ligne et ne déploie pas.
+- Après déploiement, il vérifie que `https://mimouni-industriel-electricite.vercel.app` répond en 200.
