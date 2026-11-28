@@ -16,3 +16,17 @@
 - Ordre de priorité de la couche de données (`netlify/lib/db.mjs`) : Supabase, puis Vercel Blob, puis Netlify Blobs.
 - Reprise des données existantes : `node scripts/migrer-vers-supabase.mjs` (ajout seul, ne réécrit jamais une clé déjà présente ; `--simulation` pour un décompte sans écriture).
 - Test hors ligne de l'adaptateur : `node tests/supabase-smoke.mjs`.
+
+## Mise en service (Supabase + Vercel)
+
+1. **Base** : le projet Supabase `mimouni-gestion` (région Paris, référence `kgaablwwxiasfysxqwjf`) contient déjà la table `kv` (`docs/supabase/schema.sql`).
+2. **Clé serveur** : Supabase → Project Settings → API keys → secret keys → copier la clé `service_role`.
+3. **Variables Vercel** (project settings → Environment Variables, production) :
+   - `SUPABASE_URL` = `https://kgaablwwxiasfysxqwjf.supabase.co`
+   - `SUPABASE_SERVICE_ROLE_KEY` = la clé de l'étape 2
+   Les laisser absentes maintient l'application sur son stockage actuel.
+4. **Reprise des données** (une fois, depuis un poste avec les variables) :
+   `SUPABASE_URL=… SUPABASE_SERVICE_ROLE_KEY=… BLOB_READ_WRITE_TOKEN=… npm run migrer:supabase`
+   Relancer avec `--simulation` d'abord pour un simple décompte.
+5. **Déploiement** : `VERCEL_TOKEN=… ./scripts/deployer-vercel.sh` (ou liaison du dépôt GitHub au projet Vercel pour les déploiements automatiques).
+6. **Contrôle** : connexion administrateur, ouverture d'un chantier, pointage, export CSV, page `#/preuves` (chaîne d'intégrité) et `#/stockage` (volumétrie).
