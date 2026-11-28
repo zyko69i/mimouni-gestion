@@ -2,7 +2,7 @@
 // côté serveur sur CHAQUE route (rôles : admin, chef, technicien).
 import { randomBytes } from 'node:crypto';
 import * as db from '../lib/db.mjs';
-import { hashPassword, verifyPassword, signToken, readToken } from '../lib/auth.mjs';
+import { hashPassword, verifyPassword, signToken, readToken, newTotpSecret, verifyTotp } from '../lib/auth.mjs';
 import { DEMO } from '../lib/demo.mjs';
 import { handleRegistre } from '../lib/registres.mjs';
 
@@ -97,7 +97,7 @@ function redactAbsence(a, user) {
   return a;
 }
 
-const publicUser = (u) => ({ login: u.login, name: u.name, role: u.role, technicianId: u.technicianId || '', active: u.active, createdAt: u.createdAt, demo: !!u.demo });
+const publicUser = (u) => ({ login: u.login, name: u.name, role: u.role, mfa: !!u.totpEnabled, technicianId: u.technicianId || '', active: u.active, createdAt: u.createdAt, demo: !!u.demo });
 
 async function log(user, action, entity, id, detail = '') {
   await db.journal({ who: user ? user.login : 'système', role: user ? user.role : '', action, entity, id, detail: String(detail).slice(0, 300) });
@@ -118,12 +118,23 @@ async function login(req) {
     user = { login: 'admin', name: 'Administrateur principal', role: 'admin', hash: process.env.MIMOUNI_ADMIN_HASH, active: true, tokenVersion: 0, createdAt: now() };
     await db.put('users', 'admin', user);
   }
+  const ip = (req.headers.get('x-forwarded-for') || '').split(',')[0].trim().slice(0, 45) || 'inconnue';
   if (!user || !user.active || !verifyPassword(pw, user.hash)) {
     rl.count += 1; await db.put('ratelimit', loginName, rl);
+    await log({ login: loginName, role: '' }, 'connexion refusée', 'utilisateur', loginName, 'IP ' + ip);
     return json(401, { error: 'Identifiant ou mot de passe incorrect.' });
   }
+  if (user.totpEnabled) {
+    const code = String(b.code || '');
+    if (!code) return json(401, { error: 'Code de vérification requis.', mfa: true });
+    if (!verifyTotp(user.totpSecret, code)) {
+      rl.count += 1; await db.put('ratelimit', loginName, rl);
+      await log(user, 'connexion refusée (code MFA)', 'utilisateur', user.login, 'IP ' + ip);
+      return json(401, { error: 'Code de vérification incorrect.', mfa: true });
+    }
+  }
   if (rl.count) await db.put('ratelimit', loginName, { count: 0, since: Date.now() });
-  await log(user, 'connexion', 'utilisateur', user.login);
+  await log(user, 'connexion', 'utilisateur', user.login, 'IP ' + ip + (user.totpEnabled ? ' · MFA' : ''));
   return ok({ token: signToken(user), user: publicUser(user) });
 }
 
@@ -370,6 +381,34 @@ async function route(req) {
     await db.put('users', user.login, user);
     await log(user, 'mot de passe changé', 'utilisateur', user.login);
     return ok({ token: signToken(user) });
+  }
+  if (r0 === 'me' && r1 === 'mfa' && m === 'POST') {
+    if (r2 === 'setup') {
+      if (user.totpEnabled) return bad('La double authentification est déjà active.');
+      user.totpPending = newTotpSecret(); await db.put('users', user.login, user);
+      return ok({ secret: user.totpPending, uri: 'otpauth://totp/MIMOUNI:' + encodeURIComponent(user.login) + '?secret=' + user.totpPending + '&issuer=MIMOUNI' });
+    }
+    if (r2 === 'enable') {
+      if (!user.totpPending || !verifyTotp(user.totpPending, body.code)) return bad('Code incorrect. Vérifiez l\'heure de votre téléphone.');
+      user.totpSecret = user.totpPending; user.totpEnabled = true; delete user.totpPending; await db.put('users', user.login, user);
+      await log(user, 'double authentification activée', 'utilisateur', user.login);
+      return ok({ ok: true });
+    }
+    if (r2 === 'disable') {
+      if (!user.totpEnabled) return bad('La double authentification n\'est pas active.');
+      if (!verifyPassword(String(body.password || ''), user.hash) || !verifyTotp(user.totpSecret, body.code)) return bad('Mot de passe ou code incorrect.');
+      user.totpEnabled = false; delete user.totpSecret; user.tokenVersion = (user.tokenVersion || 0) + 1; await db.put('users', user.login, user);
+      await log(user, 'double authentification désactivée', 'utilisateur', user.login);
+      return ok({ token: signToken(user) });
+    }
+  }
+  // Déconnexion à distance : l'administrateur invalide les sessions d'un compte
+  if (r0 === 'users' && r2 === 'revoke-sessions' && m === 'POST') {
+    if (!isAdmin) return deny();
+    const u = await db.get('users', r1); if (!u) return notFound();
+    u.tokenVersion = (u.tokenVersion || 0) + 1; await db.put('users', u.login, u);
+    await log(user, 'sessions révoquées', 'utilisateur', u.login);
+    return ok({ ok: true });
   }
   if (r0 === 'bootstrap' && m === 'GET') return bootstrap(user);
 

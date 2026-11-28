@@ -27,7 +27,7 @@ export const COLLECTIONS = [
   'absences', 'equipment', 'settings', 'timesheets', 'sites', 'vehicles',
   'documents', 'docflows', 'maintenances', 'reports', 'movements',
   'fuel', 'vehservice', 'baremes', 'trips', 'stock',
-  'caces', 'dict', 'consignation', 'dosimetrie', 'soustraitants', 'recompenses', 'evolution', 'signatures',
+  'caces', 'dict', 'consignation', 'dosimetrie', 'soustraitants', 'recompenses', 'evolution', 'signatures', 'couts', 'assistant',
 ];
 
 const safe = (s) => String(s).replace(/[^A-Za-z0-9_.-]/g, '');

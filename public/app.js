@@ -33,6 +33,7 @@ const ICON = {
   abs: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3.2" y="5" width="17.6" height="16" rx="2.4"/><path d="M3.2 10h17.6M8 3v4M16 3v4M9.2 14.2l5.6 3.6M14.8 14.2l-5.6 3.6"/></svg>',
   box: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12.8 2.4 4 13.4h6.4L9.6 21.6 19 10.2h-6.6z"/></svg>',
   doc: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2.8h8.4L19.2 8v13.2H6z"/><path d="M14.2 2.8V8h5M9 12.5h7M9 16.2h5"/></svg>',
+  chat: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16v11H9l-5 4z"/></svg>',
   bell: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6 16.5V11a6 6 0 1 1 12 0v5.5l1.6 1.8H4.4zM10 21h4"/></svg>',
   list: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6h12M9 12h12M9 18h12M4 6h.01M4 12h.01M4 18h.01"/></svg>',
   gear: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.03 1.56V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1.11-1.56 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.56-1.03H3a2 2 0 1 1 0-4h.09A1.7 1.7 0 0 0 4.65 8.9a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34H9a1.7 1.7 0 0 0 1.03-1.56V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1.03 1.56 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87V9a1.7 1.7 0 0 0 1.56 1.03H21a2 2 0 1 1 0 4h-.09A1.7 1.7 0 0 0 19.4 15z"/></svg>',
@@ -537,10 +538,14 @@ function viewLogin(msg = '', equipInfo = null) {
     if (!navigator.onLine) { err.textContent = 'Pas de connexion internet. Connectez-vous au réseau puis réessayez.'; return; }
     btn.disabled = true; btn.textContent = 'Connexion…';
     try {
-      const r = await api('POST', 'login', { login, password: pw });
+      const r = await api('POST', 'login', { login, password: pw, code: f.code ? f.code.value.trim() : undefined });
       S.token = r.token; localStorage.setItem('mimouni_token', r.token);
       await start();
     } catch (ex) {
+      if (ex && ex.data && ex.data.mfa) {
+        if (!f.code) f.querySelector('.err').insertAdjacentHTML('beforebegin', '<label class="f">Code de vérification (application d\'authentification)<input name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="123456"></label>');
+        err.textContent = ex.message; if (f.code) f.code.focus(); btn.disabled = false; btn.textContent = 'Se connecter'; return;
+      }
       const m = String(ex && ex.message || '');
       err.textContent = /incorrect/i.test(m) ? 'Identifiant ou mot de passe incorrect. Vérifiez les majuscules, ou demandez à l\'administrateur.'
         : /tentatives/i.test(m) ? m
@@ -573,6 +578,8 @@ function navGroups() {
       ...(r !== 'technicien' ? [
         ['#/temps', 'chart', 'Temps & production'],
         ['#/alertes', 'bell', 'Alertes', alertCount],
+        ['#/assistant', 'chat', 'Assistant'],
+        ...(r === 'admin' ? [['#/rentabilite', 'chart', 'Rentabilité'], ['#/couts', 'list', 'Coûts chantier']] : []),
       ] : []),
     ] },
     { label: 'Exploitation', items: [
@@ -779,7 +786,7 @@ async function render() {
   const map = { chantier: 'chantiers', technicien: 'techniciens', equipement: 'materiel', plus: 'plus' };
   const activeKey = map[key] || key;
   $$('[data-nav]').forEach((a) => { const n = a.dataset.nav.split('/')[1] || 'home'; a.classList.toggle('active', n === activeKey); });
-  const PAGE_LABEL = { home: isTech() ? 'Mon activité' : 'Tableau de bord', chantiers: 'Chantiers', chantier: 'Chantier', planning: 'Planning', pointage: 'Pointage des heures', techniciens: 'Techniciens', technicien: 'Fiche technicien', absences: 'Présences & absences', materiel: 'Matériel', equipement: 'Équipement', scanner: 'Scanner', rapports: 'Rapports', alertes: 'Alertes', journal: "Journal d'activité", reglages: 'Réglages', profil: 'Mon profil', plus: 'Plus', envois: 'Envois refusés', vehicules: 'Parc véhicules', habilitations: 'Habilitations', temps: 'Temps & production', sites: 'Sites', documents: 'Bibliothèque documentaire', courriers: 'Courriers', maintenance: 'Maintenance', caces: 'CACES', dict: 'DICT / DT', consignation: 'Consignation', dosimetrie: 'Dosimétrie', soustraitants: 'Sous-traitants', recompenses: 'Récompenses', evolution: 'Évolution professionnelle', signatures: 'Signatures', carburant: 'Carburant', entretien: 'Entretien véhicules', deplacements: 'Déplacements & frais', stocks: 'Stocks', baremes: 'Barèmes' };
+  const PAGE_LABEL = { home: isTech() ? 'Mon activité' : 'Tableau de bord', chantiers: 'Chantiers', chantier: 'Chantier', planning: 'Planning', pointage: 'Pointage des heures', techniciens: 'Techniciens', technicien: 'Fiche technicien', absences: 'Présences & absences', materiel: 'Matériel', equipement: 'Équipement', scanner: 'Scanner', rapports: 'Rapports', alertes: 'Alertes', journal: "Journal d'activité", reglages: 'Réglages', profil: 'Mon profil', plus: 'Plus', envois: 'Envois refusés', vehicules: 'Parc véhicules', habilitations: 'Habilitations', temps: 'Temps & production', sites: 'Sites', documents: 'Bibliothèque documentaire', courriers: 'Courriers', maintenance: 'Maintenance', rentabilite: 'Rentabilité', couts: 'Coûts chantier', assistant: 'Assistant', caces: 'CACES', dict: 'DICT / DT', consignation: 'Consignation', dosimetrie: 'Dosimétrie', soustraitants: 'Sous-traitants', recompenses: 'Récompenses', evolution: 'Évolution professionnelle', signatures: 'Signatures', carburant: 'Carburant', entretien: 'Entretien véhicules', deplacements: 'Déplacements & frais', stocks: 'Stocks', baremes: 'Barèmes' };
   const label = PAGE_LABEL[key] || 'Gestion';
   const elPage = $('#tb-page'); if (elPage) elPage.textContent = label;
   const elCrumb = $('#tb-crumb-page'); if (elCrumb) elCrumb.textContent = label;
@@ -2407,6 +2414,48 @@ Object.assign(REGS, {
 function yn_(name, label, v) { return { name, label, type: 'select', options: [['0', 'Non'], ['1', 'Oui']], value: v ? '1' : '0' }; }
 Object.keys(REGS).forEach((k) => { if (!ROUTES[k]) ROUTES[k] = regView(k); });
 
+
+Object.assign(REGS, {
+  couts: { api: 'couts', title: 'Lignes de coûts et facturation par chantier', sub: 'Budget, commande, facturable, facturé, dépenses et taux horaire. Estimations internes : ce ne sont pas des écritures comptables.', neu: 'Nouvelle ligne', canWrite: () => isAdmin(),
+    cols: [['Date', (r) => fmtD(r.date)], ['Chantier', (r) => esc((chantierById(r.chantierId) || {}).name || r.chantierId)], ['Type', (r) => esc(r.type)], ['Montant', (r) => eur(r.amount)], ['Note', (r) => esc(r.note || '–')], ['Justificatif', (r) => esc(r.proof || '–')]],
+    fields: (r) => [{ name: 'chantierId', label: 'Chantier', type: 'select', options: chOptions(), value: r?.chantierId, required: true }, { name: 'type', label: 'Type', type: 'select', options: ['Budget prévu', 'Montant de commande', 'Montant facturable', 'Montant facturé', 'Matériaux', 'Location', 'Véhicules', 'Autres dépenses', 'Taux horaire main-d\'œuvre (€/h)'], value: r?.type }, { name: 'amount', label: 'Montant (€) ou taux horaire', type: 'number', step: '0.01', value: r?.amount, required: true }, { name: 'date', label: 'Date', type: 'date', value: r?.date || todayISO() }, { name: 'note', label: 'Note', value: r?.note }, { name: 'proof', label: 'Justificatif (n° commande, facture…)', value: r?.proof }],
+    kpis: (rows) => [[rows.length, 'Lignes'], [eur(rows.filter((r) => r.type === 'Montant facturé').reduce((a, r) => a + r.amount, 0)), 'Total facturé']] },
+});
+ROUTES.couts = regView('couts');
+ROUTES.rentabilite = async (v) => {
+  if (!isAdmin()) { v.innerHTML = '<div class="card"><p>Module réservé à l\'administrateur.</p></div>'; return; }
+  const [lines, trips] = await Promise.all([api('GET', 'reg/couts'), api('GET', 'reg/trips')]);
+  const sum = (cid, type) => lines.filter((l) => l.chantierId === cid && l.type === type).reduce((a, l) => a + l.amount, 0);
+  const rows = D().chantiers.map((c) => {
+    const rate = (lines.filter((l) => l.chantierId === c.id && l.type.startsWith('Taux horaire')).sort((a, b) => String(b.date).localeCompare(String(a.date)))[0] || {}).amount || 0;
+    const hrs = progressOf(c.id).real || 0; const labor = Math.round(hrs * rate);
+    const travel = trips.filter((t) => t.chantierId === c.id).reduce((a, t) => a + ((t.calc && t.calc.total) || 0), 0);
+    const costs = labor + travel + ['Matériaux', 'Location', 'Véhicules', 'Autres dépenses'].reduce((a, t) => a + sum(c.id, t), 0);
+    const budget = sum(c.id, 'Budget prévu'), order = sum(c.id, 'Montant de commande'), billable = sum(c.id, 'Montant facturable'), billed = sum(c.id, 'Montant facturé');
+    const revenue = billable || order; const margin = revenue - costs;
+    const missing = [!budget && 'budget', !rate && 'taux horaire', !revenue && 'montant facturable'].filter(Boolean);
+    const status = !budget && !revenue ? 'Données manquantes' : budget && costs > budget ? 'En dépassement' : billable > billed ? 'En attente de facturation' : budget && costs > 0.8 * budget ? 'À surveiller' : 'Rentable (estimé)';
+    return { c, hrs, rate, labor, travel, costs, budget, order, billable, billed, margin, missing, status };
+  });
+  const cls = (s) => (s === 'En dépassement' ? 'red' : s === 'Rentable (estimé)' ? 'green' : s === 'Données manquantes' ? '' : 'orange');
+  v.innerHTML = `<div class="head"><div><h1>Rentabilité des chantiers</h1><p class="muted small" style="margin:.3rem 0 0">Estimation de pilotage, jamais un résultat comptable définitif. Aucune écriture comptable, TVA ni paiement.</p></div><div class="row"><a class="btn" href="#/couts">Saisir les coûts et montants</a></div></div>
+  <div class="grid g4 section">${kpi(rows.filter((r) => r.status === 'Rentable (estimé)').length, 'Rentables (estimé)', 'ok')}${kpi(rows.filter((r) => r.status === 'À surveiller').length, 'À surveiller', 'warn')}${kpi(rows.filter((r) => r.status === 'En dépassement').length, 'En dépassement', 'red')}${kpi(rows.filter((r) => r.status === 'En attente de facturation').length, 'En attente de facturation', 'warn')}</div>
+  <div class="card section"><div class="table-wrap"><table data-sort><thead><tr><th>Chantier</th><th>Budget</th><th>Facturable</th><th>Facturé</th><th>Heures</th><th>Main-d'œuvre</th><th>Déplacements</th><th>Coûts totaux</th><th>Marge estimée</th><th>Statut</th><th>Manque</th></tr></thead><tbody>${rows.map((r) => `<tr class="click" data-c="${esc(r.c.id)}"><td><b>${esc(r.c.name)}</b></td><td>${r.budget ? eur(r.budget) : '–'}</td><td>${r.billable ? eur(r.billable) : '–'}</td><td>${r.billed ? eur(r.billed) : '–'}</td><td>${h(r.hrs)}</td><td>${r.rate ? eur(r.labor) : '–'}</td><td>${eur(r.travel)}</td><td>${eur(r.costs)}</td><td>${r.billable || r.order ? eur(r.margin) : '–'}</td><td><span class="pill ${cls(r.status)}">${esc(r.status)}</span></td><td class="small">${esc(r.missing.join(', ') || '–')}</td></tr>`).join('') || '<tr><td colspan="11"><div class="empty">Aucun chantier.</div></td></tr>'}</tbody></table></div></div>`;
+  $$('tr[data-c]', v).forEach((tr) => (tr.onclick = () => (location.hash = '#/chantier/' + tr.dataset.c)));
+  sortableTables(v);
+};
+
+// Assistant (Partie 22) : données internes uniquement, aucune action, tout est journalisé.
+ROUTES.assistant = async (v) => {
+  if (isTech()) { v.innerHTML = '<div class="card"><p>Assistant réservé aux responsables.</p></div>'; return; }
+  const hist = await api('GET', 'reg/assistant');
+  const item = (x) => `<div class="card section"><p><b>${esc(x.question)}</b></p><p>${esc(x.answer)}</p>${(x.sources || []).length ? `<p class="small">Sources : ${x.sources.map((s) => `<a href="${esc(s.href)}">${esc(s.label)}</a>`).join(', ')}</p>` : ''}<p class="muted small">${fmtDT(x.at)} · ${x.ms} ms</p></div>`;
+  v.innerHTML = `<div class="head"><div><h1>Assistant d'exploitation</h1><p class="muted small" style="margin:.3rem 0 0">Il répond uniquement à partir des données de l'application, cite ses sources et ne déclenche aucune action. Sans information, il le dit. Sujets sensibles (habilitations, consignation, dosimétrie) : renvoi vers la fiche ou le responsable.</p></div></div>
+  <form id="as-form" class="card section" style="display:flex;gap:.6rem;flex-wrap:wrap"><input name="q" style="flex:1;min-width:220px" placeholder="Ex. : Combien de techniciens sont disponibles demain ?" required><button class="btn primary" type="submit">Demander</button></form>
+  <div id="as-res"></div><h2 style="margin-top:1.2rem">Mon historique</h2>${hist.map(item).join('') || '<div class="empty">Aucune question posée.</div>'}`;
+  $('#as-form', v).onsubmit = async (e) => { e.preventDefault(); const btn = e.target.querySelector('button'); btn.disabled = true; try { await api('POST', 'reg/assistant', { question: e.target.q.value }); render(); } catch (er) { toast(er.message); btn.disabled = false; } };
+};
+
 // Signature électronique (Partie 34) : signatures manuscrites, empreinte SHA-256 et horodatage serveur, ajout seul.
 ROUTES.signatures = async (v) => {
   if (isTech()) { v.innerHTML = '<div class="card"><p>Ce module est réservé aux responsables.</p></div>'; return; }
@@ -2504,6 +2553,7 @@ function siteForm(st = null) {
 
 // ---------------- Alertes ----------------
 ROUTES.alertes = async (v) => {
+  let regAlerts = []; if (!isTech()) { try { regAlerts = await api('GET', 'reg/alerts'); } catch { regAlerts = []; } }
   const habs = habAlerts(); const late = D().chantiers.filter(isLate); const blocked = D().tasks.filter((t) => t.status === 'Bloquée'); const conf = allConflicts();
   const sec = (t, items) => `<div class="card"><h2>${esc(t)} <span class="pill ${items.length ? 'red' : 'green'}">${items.length}</span></h2>${items.join('') || '<p class="muted">Rien à signaler.</p>'}</div>`;
   v.innerHTML = `<div class="head"><h1>Alertes</h1></div><div class="grid g2">
@@ -2511,6 +2561,7 @@ ROUTES.alertes = async (v) => {
   ${sec('Chantiers en retard', late.map((c) => `<div class="list"><div class="item"><a href="#/chantier/${c.id}">${esc(c.name)}</a><span class="small">fin prévue ${fmtD(c.endPlanned)}</span></div></div>`))}
   ${sec('Tâches bloquées', blocked.map((t) => `<div class="list"><div class="item"><a href="#/chantier/${t.chantierId}">${esc(t.title)}</a><span class="small">${esc(t.blockReason)}</span></div></div>`))}
   ${sec('Conflits de planning', conf.map(({ a, c }) => `<div class="list"><div class="item"><span>${esc(techName(a.techId))} – ${fmtD(a.date)}</span><span class="small">${esc(c.join(', '))}</span></div></div>`))}
+  ${regAlerts.length ? sec('Sécurité, parc, frais, stocks et autres modules', regAlerts.map((a) => `<div class="list"><div class="item"><span><span class="pill ${a.level}">${esc(a.module)}</span> ${esc(a.msg)}</span><a class="small" href="${esc(a.href)}">Ouvrir</a></div></div>`)) : ''}
   ${sec('Saisies non synchronisées (cet appareil)', S.queue.map((q) => `<div class="list"><div class="item"><span>${esc(q.label)}</span><span class="small">${fmtDT(q.at)}</span></div></div>`))}
   </div>`;
 };
@@ -2735,6 +2786,16 @@ ROUTES.profil = async (v) => {
   <div class="row" style="margin-top:.8rem"><button class="btn" id="pw">Changer mon mot de passe</button><button class="btn" id="out">Se déconnecter</button></div></div>`;
   $('#pw', v).onclick = () => formModal({ title: 'Changer mon mot de passe', fields: [{ name: 'current', label: 'Mot de passe actuel', type: 'password', required: true, autocomplete: 'current-password' }, { name: 'next', label: 'Nouveau mot de passe (10 caractères min.)', type: 'password', required: true, autocomplete: 'new-password' }], onSubmit: async (vals) => { const r = await api('POST', 'me/password', vals); S.token = r.token; localStorage.setItem('mimouni_token', r.token); toast('Mot de passe changé'); } });
   $('#out', v).onclick = () => logout();
+  const mfaBox = document.createElement('div'); mfaBox.className = 'card section';
+  mfaBox.innerHTML = `<h2>${ICON.shield} Double authentification</h2><p class="muted small">${S.me.mfa ? 'Active : un code à 6 chiffres est demandé à chaque connexion.' : 'Non active. Recommandé pour les comptes administrateur et chef d\'équipe.'}</p><button class="btn ${S.me.mfa ? '' : 'primary'}" id="mfa-btn">${S.me.mfa ? 'Désactiver' : 'Activer'}</button>`;
+  v.appendChild(mfaBox);
+  $('#mfa-btn', v).onclick = async () => {
+    try {
+      if (S.me.mfa) return formModal({ title: 'Désactiver la double authentification', fields: [{ name: 'password', label: 'Mot de passe', type: 'password', required: true }, { name: 'code', label: 'Code actuel (6 chiffres)', required: true }], onSubmit: async (vals) => { const r = await api('POST', 'me/mfa/disable', vals); S.token = r.token; localStorage.setItem('mimouni_token', r.token); S.me.mfa = false; toast('Double authentification désactivée'); render(); } });
+      const r = await api('POST', 'me/mfa/setup');
+      modal(`<h2>Activer la double authentification</h2><p class="small">Scannez ce QR code avec une application d'authentification (Google Authenticator, Microsoft Authenticator, Aegis…), ou saisissez la clé : <b>${esc(r.secret)}</b></p><div style="max-width:220px;margin:auto">${qrSVG(r.uri, 4)}</div><form id="mfa-form"><label class="f">Code à 6 chiffres<input name="code" inputmode="numeric" maxlength="6" required></label><p class="err" data-err></p><div class="actions"><button type="button" class="btn" data-close>Annuler</button><button class="btn primary" type="submit">Activer</button></div></form>`, (root, close) => { $('#mfa-form', root).onsubmit = async (e) => { e.preventDefault(); try { await api('POST', 'me/mfa/enable', { code: e.target.code.value.trim() }); S.me.mfa = true; toast('Double authentification activée'); close(); render(); } catch (er) { $('[data-err]', root).textContent = er.message; } }; });
+    } catch (e) { toast(e.message); }
+  };
 };
 ROUTES.plus = async (v) => {
   const DESCR = { '#/pointage': 'Saisir et valider les heures', '#/materiel': 'Équipements et interventions', '#/techniciens': 'Fiches, habilitations, rôles', '#/absences': 'Congés, arrêts, disponibilité', '#/rapports': 'Synthèses et exports', '#/alertes': 'Habilitations et retards', '#/journal': "Historique des actions", '#/reglages': 'Entreprise, données, sauvegardes', '#/scanner': 'Identifier un équipement', '#/planning': 'Affectations de la semaine', '#/chantiers': 'Tous les chantiers', '#/vehicules': 'Flotte, affectations, contrôles', '#/habilitations': 'Matrice électrique et nucléaire', '#/temps': 'Heures par mois, site et chantier', '#/sites': 'Tous les sites et leurs indicateurs', '#/documents': 'Bibliothèque technique et sécurité', '#/courriers': 'Envois, réceptions et accusés', '#/maintenance': 'Maintenances, contrôles, signalements' };

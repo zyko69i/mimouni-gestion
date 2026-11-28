@@ -18,6 +18,7 @@ export const BAREME_STATUS = ['brouillon', 'en vigueur', 'remplacé', 'obsolète
 export const TRIP_CATEGORIES = ['Trajet habituel domicile-travail', 'Déplacement professionnel', 'Grand déplacement', 'Déplacement entre deux chantiers', 'Déplacement pendant la journée de travail'];
 export const TRIP_VEHICLE = ['Véhicule de service', 'Véhicule personnel', 'Transport en commun', 'Covoiturage'];
 export const TRIP_STATUS = ['brouillon', 'à compléter', 'en attente de justificatifs', 'à valider', 'validé', 'refusé', 'transmis à la comptabilité', 'payé'];
+export const COST_TYPES = ['Budget prévu', 'Montant de commande', 'Montant facturable', 'Montant facturé', 'Matériaux', 'Location', 'Véhicules', 'Autres dépenses', 'Taux horaire main-d\'œuvre (€/h)'];
 export const SERVICE_TYPES = ['Vidange', 'Pneumatiques', 'Freins', 'Batterie', 'Révision', 'Courroie', 'Contrôle technique', 'Contre-visite', 'Contrôle périodique', 'Réparation', 'Sinistre', 'Immobilisation', 'Assurance'];
 export const CT_RESULTS = ['', 'Favorable', 'Défaillances mineures', 'Défaillances majeures', 'Défaillances critiques', 'Contre-visite à effectuer'];
 
@@ -73,6 +74,9 @@ export const REG = {
   evolution: { label: 'Évolution professionnelle', write: ['admin'], read: ['admin', 'chef'], fields: [
     F('techId', 's', { max: 40, req: true }), F('date', 'd', { req: true }), F('event', 'e', { options: ['Embauche', 'Changement de poste', 'Promotion', 'Formation suivie', 'Nouvelle qualification', 'Entretien annuel', 'Changement de site', 'Autre'], req: true }),
     F('title', 's', { max: 150 }), F('level', 's', { max: 60 }), F('notes', 's', { max: 800 }),
+  ] },
+  couts: { label: 'Suivi économique chantier', write: ['admin'], read: ['admin'], fields: [
+    F('chantierId', 's', { max: 40, req: true }), F('type', 'e', { options: COST_TYPES, req: true }), F('amount', 'n', { req: true }), F('date', 'd'), F('note', 's', { max: 300 }), F('proof', 's', { max: 200 }),
   ] },
   stock: { label: 'Stocks et consommables', write: ['admin', 'chef'], read: ['admin', 'chef'], fields: [
     F('name', 's', { max: 120, req: true }), F('ref', 's', { max: 60 }), F('siteId', 's', { max: 40 }), F('unit', 's', { max: 20 }),
@@ -133,6 +137,8 @@ async function tripCompute(t) {
 }
 
 export async function handleRegistre({ user, m, r1, r2: id, body, log }) {
+  if (r1 === 'alerts' && m === 'GET') return handleAlerts(user);
+  if (r1 === 'assistant') return handleAssistant({ user, m, body, log });
   if (r1 === 'signatures') return handleSignatures({ user, m, id, body, log });
   const spec = REG[r1];
   if (!spec) return json(404, { error: 'Registre inconnu.' });
@@ -246,4 +252,80 @@ async function handleSignatures({ user, m, id, body, log }) {
   await db.put('signatures', rec.id, rec);
   await log(user, 'document signé', 'signature', rec.id, type + ' — ' + title + ' — ' + signers.map((x) => x.name).join(', ') + ' — empreinte ' + rec.hash.slice(0, 16));
   return json(200, { id: rec.id, hash: rec.hash, signedAt: rec.signedAt });
+}
+
+// ---------- Centre d'alertes unifié (16.2 / 21) : chaque alerte mène à la fiche concernée ----------
+const today = () => new Date().toISOString().slice(0, 10);
+const inDays = (d) => Math.round((new Date(d + 'T00:00:00Z') - new Date(today() + 'T00:00:00Z')) / 864e5);
+const tier = (n) => (n < 0 ? 'dépassée' : n <= 7 ? 'J-7' : n <= 30 ? 'J-30' : n <= 60 ? 'J-60' : n <= 90 ? 'J-90' : '');
+async function handleAlerts(user) {
+  if (!['admin', 'chef'].includes(user.role)) return json(403, { error: 'Action non autorisée pour votre profil.' });
+  const admin = user.role === 'admin';
+  const L = (n) => db.list(n);
+  const [caces, dict, st, vs, trips, stock, cons, assignments, techs, veh, recs, baremes, doso] = await Promise.all([L('caces'), L('dict'), L('soustraitants'), L('vehservice'), L('trips'), L('stock'), L('consignation'), L('assignments'), L('technicians'), L('vehicles'), L('recompenses'), L('baremes'), admin ? L('dosimetrie') : []]);
+  const tn = (id) => { const t = techs.find((x) => x.id === id); return t ? t.firstName + ' ' + t.lastName : id; };
+  const out = [];
+  const add = (level, module, msg, href) => out.push({ level, module, msg, href });
+  caces.filter((x) => !x.compliant).forEach((x) => add('red', 'CACES', 'CACES ' + x.category + ' de ' + tn(x.techId) + ' : non conforme (' + x.calculated + ', déclaré ' + (x.declared || 'à vérifier') + ')', '#/caces'));
+  dict.filter((x) => x.late || (x.warnings || []).length).forEach((x) => add('red', 'DICT/DT', (x.type || 'DICT') + ' : ' + (x.late ? 'réponse en retard' : 'travaux prévus sans réponse'), '#/dict'));
+  st.filter((x) => (x.warnings || []).length).forEach((x) => add('orange', 'Sous-traitants', x.name + ' : ' + x.warnings.join(' ; '), '#/soustraitants'));
+  vs.filter((x) => x.nextDate && inDays(x.nextDate) <= 90).forEach((x) => { const v = veh.find((q) => q.id === x.vehicleId); const n = inDays(x.nextDate); add(n <= 30 ? 'red' : 'orange', 'Véhicules', (x.type || 'Opération') + ' ' + (v ? v.plate : x.vehicleId) + ' : échéance ' + tier(n) + ' (' + x.nextDate + ')', '#/entretien'); });
+  veh.forEach((v) => [['ct', 'Contrôle technique'], ['insurance', 'Assurance'], ['nextService', 'Révision']].forEach(([k, l]) => { if (v[k] && inDays(v[k]) <= 90) { const n = inDays(v[k]); add(n <= 30 ? 'red' : 'orange', 'Véhicules', l + ' ' + v.plate + ' : ' + tier(n) + ' (' + v[k] + ')', '#/vehicules'); } }));
+  trips.filter((x) => x.status === 'à valider').forEach((x) => add('orange', 'Déplacements', 'Déplacement de ' + tn(x.techId) + ' du ' + x.date + ' à valider', '#/deplacements'));
+  trips.filter((x) => !x.proof && !['brouillon', 'refusé'].includes(x.status)).forEach((x) => add('orange', 'Déplacements', 'Déplacement de ' + tn(x.techId) + ' du ' + x.date + ' sans justificatif', '#/deplacements'));
+  trips.filter((x) => x.calc && x.calc.gap && !x.gapReason).forEach((x) => add('red', 'Déplacements', 'Écart de distance inexpliqué : ' + tn(x.techId) + ' le ' + x.date, '#/deplacements'));
+  stock.filter((x) => x.low).forEach((x) => add('orange', 'Stocks', x.name + ' : ' + x.qty + ' ' + (x.unit || '') + ' (seuil ' + x.minQty + ')', '#/stocks'));
+  cons.filter((x) => x.status === 'Consigné').forEach((x) => add('orange', 'Consignation', x.equipment + ' consigné, déconsignation non clôturée', '#/consignation'));
+  assignments.filter((a) => a.derogation && a.derogation.until && inDays(a.derogation.until) >= 0 && inDays(a.derogation.until) <= 7).forEach((a) => add('orange', 'Planning', 'Dérogation QHSE de ' + tn(a.techId) + ' expire le ' + a.derogation.until, '#/planning'));
+  techs.filter((t) => t.active !== false && t.entryDate).forEach((t) => {
+    const e = new Date(t.entryDate + 'T00:00:00Z'); const y = new Date().getUTCFullYear(); let next = new Date(Date.UTC(y, e.getUTCMonth(), e.getUTCDate())); if (next < new Date(today() + 'T00:00:00Z')) next = new Date(Date.UTC(y + 1, e.getUTCMonth(), e.getUTCDate()));
+    const years = next.getUTCFullYear() - e.getUTCFullYear(); const n = Math.round((next - new Date(today() + 'T00:00:00Z')) / 864e5);
+    if ([10, 20, 30, 35, 40].includes(years) && n <= 60) add('orange', 'Ancienneté', tn(t.id) + ' : palier de ' + years + ' ans le ' + next.toISOString().slice(0, 10) + ' (éligibilité médaille du travail à vérifier)', '#/technicien/' + t.id);
+  });
+  if (admin) {
+    doso.filter((x) => (x.warnings || []).length).forEach((x) => add('red', 'Dosimétrie', tn(x.techId) + ' : ' + x.warnings[0], '#/dosimetrie'));
+    recs.filter((x) => x.status === 'Proposée').forEach((x) => add('orange', 'Récompenses', x.type + ' proposée pour ' + tn(x.techId) + ' à valider', '#/recompenses'));
+    baremes.filter((x) => x.status === 'brouillon').forEach((x) => add('orange', 'Barèmes', 'Barème « ' + x.name + ' » en brouillon', '#/baremes'));
+    const backups = await db.listBackups().catch(() => []);
+    if (!backups.length) add('red', 'Sauvegardes', 'Aucune sauvegarde enregistrée', '#/reglages');
+  }
+  return json(200, out);
+}
+
+// ---------- Assistant (22) : données internes uniquement, jamais d'invention, aucune action ----------
+const norm = (q) => String(q || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+const SENSITIVE = ['consign', 'dosimetr', 'nucleaire', 'reglement', 'securite', 'habilit', 'vat', 'radioprotection', 'caces'];
+async function handleAssistant({ user, m, body, log }) {
+  if (!['admin', 'chef'].includes(user.role)) return json(403, { error: 'Action non autorisée pour votre profil.' });
+  if (m === 'GET') return json(200, (await db.list('assistant')).filter((x) => x.login === user.login).sort((a, b) => b.at.localeCompare(a.at)).slice(0, 50));
+  if (m !== 'POST') return json(405, { error: 'Méthode non supportée.' });
+  const t0 = Date.now();
+  const q = str(body.question, 400); if (!q) return json(400, { error: 'Posez une question.' });
+  const n = norm(q); const sources = []; let answer = '';
+  const [techs, assignments, absences, veh, trips, reports, chantiers, vs] = await Promise.all([db.list('technicians'), db.list('assignments'), db.list('absences'), db.list('vehicles'), db.list('trips'), db.list('reports'), db.list('chantiers'), db.list('vehservice')]);
+  let allowedT = techs;
+  if (user.role === 'chef') { const mine = new Set(chantiers.filter((c) => c.chefId === user.login).flatMap((c) => c.team || [])); assignments.filter((a) => chantiers.some((c) => c.id === a.chantierId && c.chefId === user.login)).forEach((a) => mine.add(a.techId)); allowedT = techs.filter((t) => mine.has(t.id)); }
+  const day = n.includes('demain') ? new Date(Date.now() + 864e5).toISOString().slice(0, 10) : today();
+  if (SENSITIVE.some((k) => n.includes(k))) {
+    answer = 'Ce sujet est sensible (sécurité, habilitations, consignation, dosimétrie, réglementation). Je ne fais pas d\'analyse : consultez directement la fiche concernée ou le responsable QHSE.'; sources.push({ label: 'Habilitations', href: '#/habilitations' }, { label: 'Sécurité et conformité', href: '#/caces' });
+  } else if (n.includes('disponible')) {
+    const free = allowedT.filter((t) => t.active !== false && !absences.some((a) => a.techId === t.id && a.type !== 'retard' && a.status !== 'Refusée' && a.start <= day && (a.end || a.start) >= day) && !assignments.some((a) => a.techId === t.id && a.date === day));
+    answer = free.length + ' technicien(s) disponible(s) le ' + day + ' (ni absent, ni affecté) sur ' + allowedT.filter((t) => t.active !== false).length + ' actif(s) dans votre périmètre : ' + (free.slice(0, 15).map((t) => t.firstName + ' ' + t.lastName).join(', ') || 'aucun') + '.';
+    free.slice(0, 15).forEach((t) => sources.push({ label: t.firstName + ' ' + t.lastName, href: '#/technicien/' + t.id }));
+  } else if (n.includes('controle technique') || n.includes(' ct ')) {
+    const limit = new Date(); limit.setUTCMonth(limit.getUTCMonth() + 1); const lim = limit.toISOString().slice(0, 10);
+    const list = veh.filter((v) => v.ct && v.ct <= lim); const extra = vs.filter((x) => x.type === 'Contrôle technique' && x.nextDate && x.nextDate <= lim);
+    answer = list.length || extra.length ? 'Contrôle technique à effectuer d\'ici le ' + lim + ' : ' + [...list.map((v) => v.plate + ' (' + v.ct + ')'), ...extra.map((x) => (veh.find((v) => v.id === x.vehicleId) || {}).plate + ' (' + x.nextDate + ')')].join(', ') + '.' : 'Aucun véhicule n\'a de contrôle technique à effectuer d\'ici le ' + lim + ' d\'après les dates enregistrées. Les véhicules sans date de contrôle ne sont pas pris en compte.';
+    sources.push({ label: 'Parc véhicules', href: '#/vehicules' }, { label: 'Entretien véhicules', href: '#/entretien' });
+  } else if (n.includes('deplacement') && (n.includes('attente') || n.includes('validation'))) {
+    if (user.role !== 'admin') answer = 'Je ne dispose pas de cette information pour votre profil.';
+    else { const l = trips.filter((x) => x.status === 'à valider'); answer = l.length + ' déplacement(s) en attente de validation' + (l.length ? ' : ' + l.slice(0, 10).map((x) => (techs.find((t) => t.id === x.techId) || {}).lastName + ' ' + x.date).join(', ') : '') + '.'; sources.push({ label: 'Déplacements et frais', href: '#/deplacements' }); }
+  } else if (n.includes('panne')) {
+    const l = reports.filter((x) => x.type === 'Panne' && ['Ouvert', 'En cours'].includes(x.status));
+    answer = l.length ? l.length + ' signalement(s) de panne ouvert(s).' : 'Aucun signalement de panne ouvert dans la base.'; sources.push({ label: 'Maintenance et signalements', href: '#/maintenance' });
+  } else answer = 'Je ne dispose pas de cette information. Je peux répondre sur : techniciens disponibles (aujourd\'hui, demain), contrôles techniques du mois, déplacements en attente de validation, pannes ouvertes.';
+  const rec = { id: rid(), login: user.login, question: q, answer, sources, at: now(), ms: Date.now() - t0 };
+  await db.put('assistant', rec.id, rec);
+  await log(user, 'assistant interrogé', 'assistant', rec.id, q.slice(0, 120));
+  return json(200, rec);
 }

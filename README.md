@@ -30,3 +30,10 @@ présences et absences, matériel avec QR codes permanents, scanner, historique 
 - **Stocks** et avertissements visibles par module.
 - Registres : `netlify/lib/registres.mjs` (règles métier côté serveur, lignes jamais effacées, corrections journalisées avant / après).
 - Les sauvegardes couvrent désormais toutes les collections ; une ancienne sauvegarde ne supprime pas les collections qu'elle ne contient pas.
+
+## Lot 4 : sécurité, alertes, assistant, rentabilité
+
+- Double authentification TOTP optionnelle (Profil), journal des connexions (IP, refus), révocation des sessions par l'administrateur.
+- Alertes unifiées (`reg/alerts`) : CACES, DICT, sous-traitants, véhicules, frais, stocks, consignation, dérogations, dosimétrie, barèmes, sauvegardes.
+- Assistant d'exploitation basé sur les données internes : cite ses sources, aucune action, refuse les sujets sensibles, interactions journalisées.
+- Rentabilité des chantiers (administrateur) : estimation de pilotage, pas de comptabilité.
