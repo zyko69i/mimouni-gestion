@@ -6,6 +6,7 @@
 // et une clé par entrée d'historique (« hist/<équipement>/<horodatage>-<id> »).
 // Aucun gros fichier JSON partagé n'est jamais réécrit.
 
+import { createHash } from 'node:crypto';
 import { getStore } from '@netlify/blobs';
 import { vercelStore } from './store-vercel.mjs';
 
@@ -28,6 +29,7 @@ export const COLLECTIONS = [
   'documents', 'docflows', 'maintenances', 'reports', 'movements',
   'fuel', 'vehservice', 'baremes', 'trips', 'stock',
   'caces', 'dict', 'consignation', 'dosimetrie', 'soustraitants', 'recompenses', 'evolution', 'signatures', 'couts', 'assistant',
+  'rgpd', 'rgpdreq', 'shares', 'mails',
 ];
 
 const safe = (s) => String(s).replace(/[^A-Za-z0-9_.-]/g, '');
@@ -109,10 +111,41 @@ export async function getPhoto(id) {
 export async function listPhotoKeys() { return listKeys('photos/'); }
 
 // ---------- Journal d'activité : ajout seul ----------
+// Le journal est chaîné : chaque entrée porte l'empreinte de son contenu et la
+// clé de l'entrée précédente. Toute modification ou suppression casse la chaîne,
+// ce qui rend la traçabilité vérifiable (route « preuves »).
 export async function journal(entry) {
   const at = new Date().toISOString();
   const id = Math.random().toString(36).slice(2, 10);
-  await store().setJSON(`journal/${stamp(at)}-${id}`, { ...entry, at }, { onlyIfNew: true });
+  const key = `journal/${stamp(at)}-${id}`;
+  const prev = await lastJournalKey();
+  const body = { ...entry, at, prev };
+  body.hash = journalHash(body);
+  await store().setJSON(key, body, { onlyIfNew: true });
+  jrnlLast = key; jrnlAt = Date.now();
+}
+
+// Dernière clé connue : évite de lister tout le journal à chaque écriture.
+// Le cache est court (2 min) pour rester juste entre deux instances.
+let jrnlLast = '', jrnlAt = 0;
+async function lastJournalKey() {
+  if (jrnlLast && Date.now() - jrnlAt < 120000) return jrnlLast;
+  try {
+    const keys = (await listKeys('journal/')).sort();
+    jrnlLast = keys.length ? keys[keys.length - 1] : '';
+    jrnlAt = Date.now();
+    return jrnlLast;
+  } catch { return ''; }
+}
+
+export function journalHash(body) {
+  const { hash, ...rest } = body;
+  return createHash('sha256').update(JSON.stringify(rest)).digest('hex');
+}
+export async function listJournalWithKeys(limit = 500) {
+  const keys = (await listKeys('journal/')).sort().reverse().slice(0, limit);
+  const entries = await getMany(keys);
+  return keys.map((k, i) => ({ key: k, entry: entries[i] })).filter((x) => x.entry);
 }
 export async function listJournal(limit = 200) {
   const keys = (await listKeys('journal/')).sort().reverse().slice(0, limit);

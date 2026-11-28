@@ -5,6 +5,10 @@ import * as db from '../lib/db.mjs';
 import { hashPassword, verifyPassword, signToken, readToken, newTotpSecret, verifyTotp } from '../lib/auth.mjs';
 import { DEMO } from '../lib/demo.mjs';
 import { handleRegistre } from '../lib/registres.mjs';
+import { handleRgpd } from '../lib/rgpd.mjs';
+import { handleShares, openShare } from '../lib/partage.mjs';
+import { handleNotifications } from '../lib/notifs.mjs';
+import { handlePreuves } from '../lib/preuves.mjs';
 
 const COMPANY = 'MIMOUNI INDUSTRIEL ÉLECTRICITÉ';
 const H = { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' };
@@ -36,6 +40,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const badEmail = (v) => (str(v) && !EMAIL_RE.test(str(v)) ? 'Adresse email invalide.' : '');
 const badPhone = (v) => (str(v) && !/^[+0-9][0-9 .\-()]{5,24}$/.test(str(v)) ? 'Numéro de téléphone invalide (chiffres, espaces, + . - seulement).' : '');
 const firstErr = (...l) => l.find(Boolean) || '';
+const addMonths = (day, n) => { const d = new Date(String(day || new Date().toISOString().slice(0, 10)) + 'T00:00:00Z'); d.setUTCMonth(d.getUTCMonth() + Number(n || 0)); return d.toISOString().slice(0, 10); };
 
 const ROLES = ['admin', 'chef', 'technicien'];
 const TASK_STATUS = ['À faire', 'En cours', 'Bloquée', 'Terminée', 'Annulée'];
@@ -361,6 +366,8 @@ async function route(req) {
 
   if (r0 === 'health') return ok({ ok: true, name: COMPANY });
   if (r0 === 'login' && m === 'POST') return login(req);
+  // Lien de délégation : consultable sans session, données filtrées et lecture seule.
+  if (r0 === 'public' && r1 === 'share' && r2 && m === 'GET') return openShare(r2);
   if (r0 === 'public' && r1 === 'e' && r2 && m === 'GET') {
     const e = await db.get('equipment', r2);
     return e ? ok({ id: e.id, name: e.name }) : notFound('Équipement inconnu.');
@@ -741,6 +748,24 @@ async function route(req) {
       await log(user, 'équipement modifié', 'équipement', e.id);
       return ok(e);
     }
+    // Impression en lot d'étiquettes QR : une seule écriture par équipement,
+    // une seule ligne de journal pour la planche.
+    if (r1 === 'labels' && m === 'POST') {
+      if (!isAdmin) return deny('Seul l\'administrateur imprime les étiquettes.');
+      const ids = (Array.isArray(body.ids) ? body.ids : []).map((x) => str(x, 40)).filter(Boolean).slice(0, 200);
+      if (!ids.length) return bad('Sélectionnez au moins un équipement.');
+      const fmt = str(body.format, 4) || '24';
+      let done = 0; const missing = [];
+      for (const id of ids) {
+        const e = await db.get('equipment', id);
+        if (!e) { missing.push(id); continue; }
+        e.labelPrints = (e.labelPrints || 0) + 1; e.lastLabelAt = now();
+        await db.put('equipment', e.id, e);
+        await log(user, 'étiquette imprimée', 'équipement', e.id, 'planche ' + fmt + ' · impression n°' + e.labelPrints);
+        done++;
+      }
+      return ok({ printed: done, missing, format: fmt });
+    }
     if (r1 && r2 === 'label' && m === 'POST') {
       if (!isAdmin) return deny('Seul l\'administrateur imprime les étiquettes.');
       const e = await db.get('equipment', r1); if (!e) return notFound();
@@ -891,13 +916,44 @@ async function route(req) {
         id: 'DOC-' + rid(6), title: str(body.title, 200), category: str(body.category, 60) || 'Électricité',
         ref: str(body.ref, 80), version: str(body.version, 20) || '1.0', status: DOC_STATUS.includes(body.status) ? body.status : 'Valide',
         siteId: str(body.siteId, 20), owner: str(body.owner, 80), reviewAt: date(body.reviewAt), notes: str(body.notes, 1000),
-        link: str(body.link, 500), tags: Array.isArray(body.tags) ? body.tags.map((t) => str(t, 40)).slice(0, 10) : [],
+        link: str(body.link, 500), tags: Array.isArray(body.tags) ? body.tags.map((t) => str(t, 40)).filter(Boolean).slice(0, 10) : String(body.tags || '').split(',').map((t) => str(t, 40)).filter(Boolean).slice(0, 10),
         createdAtTs: now(), updatedAt: now(), createdBy: user.login, history: [],
       };
       if (!doc.title) return bad('Le titre du document est obligatoire.');
       if (!(await siteVisible(user, doc.siteId))) return deny();
       await db.put('documents', doc.id, doc);
       await log(user, 'document ajouté', 'document', doc.id, doc.title);
+      return ok(doc);
+    }
+    // Nouvelle version : l'ancienne est conservée dans l'historique, jamais écrasée.
+    if (m === 'POST' && r1 && r2 === 'version') {
+      if (!['admin', 'chef'].includes(user.role)) return deny();
+      const doc = await db.get('documents', r1); if (!doc) return notFound('Document inconnu.');
+      const v = str(body.version, 20);
+      if (!v) return bad('Indiquez le numéro de la nouvelle version (ex. 2.0).');
+      if (v === doc.version) return bad('Cette version est déjà la version en vigueur.');
+      const previous = { version: doc.version, status: doc.status, link: doc.link || '', reviewAt: doc.reviewAt || '' };
+      doc.history = [...(doc.history || []), { at: now(), by: user.login, action: 'nouvelle version', version: previous.version, status: 'Remplacé', previous }].slice(-40);
+      doc.replacedVersion = previous.version;
+      doc.version = v;
+      if (body.link !== undefined) doc.link = str(body.link, 500);
+      if (body.notes !== undefined) doc.notes = str(body.notes, 2000);
+      if (body.owner !== undefined) doc.owner = str(body.owner, 80);
+      doc.reviewAt = date(body.reviewAt) || date(addMonths(now().slice(0, 10), 12));
+      doc.status = 'Valide'; doc.updatedAt = now();
+      await db.put('documents', doc.id, doc);
+      await log(user, 'nouvelle version de document', 'document', doc.id, previous.version + ' → ' + v);
+      return ok(doc);
+    }
+    // Revue documentaire : repousse la prochaine revue et remet le statut à « Valide ».
+    if (m === 'POST' && r1 && r2 === 'review') {
+      if (!['admin', 'chef'].includes(user.role)) return deny();
+      const doc = await db.get('documents', r1); if (!doc) return notFound('Document inconnu.');
+      const next = date(body.reviewAt) || date(addMonths(now().slice(0, 10), 12));
+      doc.history = [...(doc.history || []), { at: now(), by: user.login, action: 'revue', version: doc.version, status: doc.status, previous: { reviewAt: doc.reviewAt || '' } }].slice(-40);
+      doc.reviewAt = next; doc.status = 'Valide'; doc.reviewedBy = user.login; doc.reviewedAt = now(); doc.updatedAt = now();
+      await db.put('documents', doc.id, doc);
+      await log(user, 'revue documentaire enregistrée', 'document', doc.id, next);
       return ok(doc);
     }
     if (r1 && m === 'PUT') {
@@ -908,6 +964,7 @@ async function route(req) {
       for (const k of ['category', 'ref', 'version', 'owner', 'notes', 'link', 'siteId']) if (body[k] !== undefined) doc[k] = str(body[k], k === 'notes' ? 1000 : 200);
       if (body.status && DOC_STATUS.includes(body.status)) doc.status = body.status;
       if (body.reviewAt !== undefined) doc.reviewAt = date(body.reviewAt);
+      if (body.tags !== undefined) doc.tags = (Array.isArray(body.tags) ? body.tags : String(body.tags).split(',')).map((t) => str(t, 40)).filter(Boolean).slice(0, 10);
       doc.updatedAt = now();
       await db.put('documents', doc.id, doc);
       await log(user, 'document modifié', 'document', doc.id, doc.title);
@@ -938,8 +995,9 @@ async function route(req) {
         id: 'FLW-' + rid(6), name: str(body.name, 200), type: str(body.type, 60) || 'Autre',
         direction: body.direction === 'Réception' ? 'Réception' : 'Envoi', to: str(body.to, 120), from: str(body.from, 120),
         siteId: str(body.siteId, 20), chantierId: str(body.chantierId, 20), status: FLOW_STATUS.includes(body.status) ? body.status : 'Attendu',
-        ack: !!body.ack, version: str(body.version, 20), owner: str(body.owner, 80), notes: str(body.notes, 1000),
-        sentAt: date(body.sentAt), receivedAt: date(body.receivedAt), createdAt: now(), updatedAt: now(), createdBy: user.login, history: [],
+        ack: !!body.ack, ackAt: date(body.ackAt), version: str(body.version, 20), owner: str(body.owner, 80), notes: str(body.notes, 1000),
+        ref: str(body.ref, 80), link: str(body.link, 500), followUpAt: date(body.followUpAt),
+        sentAt: date(body.sentAt), receivedAt: date(body.receivedAt), createdAt: now(), updatedAt: now(), createdBy: user.login, history: [], relances: 0,
       };
       if (!f.name) return bad('Le libellé du courrier est obligatoire.');
       await db.put('docflows', f.id, f);
@@ -950,13 +1008,29 @@ async function route(req) {
       if (!['admin', 'chef'].includes(user.role)) return deny();
       const f = await db.get('docflows', r1); if (!f) return notFound('Courrier inconnu.');
       f.history = [...(f.history || []), { at: now(), by: user.login, status: f.status, ack: f.ack }].slice(-30);
-      for (const k of ['name', 'type', 'to', 'from', 'siteId', 'chantierId', 'version', 'owner', 'notes']) if (body[k] !== undefined) f[k] = str(body[k], k === 'notes' ? 1000 : 200);
+      for (const k of ['name', 'type', 'to', 'from', 'siteId', 'chantierId', 'version', 'owner', 'notes', 'ref', 'link']) if (body[k] !== undefined) f[k] = str(body[k], k === 'notes' ? 1000 : 500);
       if (body.status && FLOW_STATUS.includes(body.status)) f.status = body.status;
       if (body.ack !== undefined) f.ack = !!body.ack;
-      for (const k of ['sentAt', 'receivedAt']) if (body[k] !== undefined) f[k] = date(body[k]);
+      if (body.ack && !f.ackAt) f.ackAt = now().slice(0, 10);
+      if (!body.ack && body.ack !== undefined) f.ackAt = '';
+      for (const k of ['sentAt', 'receivedAt', 'ackAt', 'followUpAt']) if (body[k] !== undefined) f[k] = date(body[k]);
       f.updatedAt = now();
       await db.put('docflows', f.id, f);
       await log(user, 'courrier mis à jour', 'courrier', f.id, f.status);
+      return ok(f);
+    }
+    // Relance : compteur, date de la prochaine relance et trace dans l'historique.
+    if (m === 'POST' && r1 && r2 === 'relance') {
+      if (!['admin', 'chef'].includes(user.role)) return deny();
+      const f = await db.get('docflows', r1); if (!f) return notFound('Courrier inconnu.');
+      if (f.status !== 'Attendu') return bad('Ce courrier n\'est plus en attente de retour.');
+      f.relances = (f.relances || 0) + 1;
+      f.lastRelanceAt = now();
+      f.followUpAt = body.nextFollowUpAt !== undefined ? date(body.nextFollowUpAt) : (() => { const d = new Date(); d.setDate(d.getDate() + 7); return d.toISOString().slice(0, 10); })();
+      f.history = [...(f.history || []), { at: now(), by: user.login, action: 'relance', count: f.relances, next: f.followUpAt }].slice(-40);
+      f.updatedAt = now();
+      await db.put('docflows', f.id, f);
+      await log(user, 'courrier relancé', 'courrier', f.id, 'relance n°' + f.relances + ' · prochaine ' + f.followUpAt);
       return ok(f);
     }
     if (m === 'DELETE') return deny('Un courrier ne s\'efface pas : il peut être archivé.');
@@ -978,6 +1052,9 @@ async function route(req) {
         title: str(body.title, 200), kind: MAINT_KINDS.includes(body.kind) ? body.kind : 'Préventive',
         status: MAINT_STATUS.includes(body.status) ? body.status : 'Planifiée', dueDate: date(body.dueDate), doneAt: date(body.doneAt),
         assignee: str(body.assignee, 30), provider: str(body.provider, 80), notes: str(body.notes, 1000),
+        periodMonths: Math.min(120, Math.max(0, Math.round(Number(body.periodMonths) || 0))),
+        contractRef: str(body.contractRef, 120), proof: str(body.proof, 300), checklist: str(body.checklist, 2000),
+        cost: num(body.cost), durationH: num(body.durationH), nextId: '', previousId: '',
         createdAt: now(), updatedAt: now(), createdBy: user.login, history: [],
       };
       if (!mt.title) return bad('Le libellé de la maintenance est obligatoire.');
@@ -990,11 +1067,28 @@ async function route(req) {
       if (!['admin', 'chef'].includes(user.role)) return deny();
       const mt = await db.get('maintenances', r1); if (!mt) return notFound('Maintenance inconnue.');
       mt.history = [...(mt.history || []), { at: now(), by: user.login, status: mt.status }].slice(-30);
-      for (const k of ['equipId', 'siteId', 'chantierId', 'title', 'assignee', 'provider', 'notes']) if (body[k] !== undefined) mt[k] = str(body[k], k === 'notes' ? 1000 : 200);
+      for (const k of ['equipId', 'siteId', 'chantierId', 'title', 'assignee', 'provider', 'notes', 'contractRef', 'proof', 'checklist']) if (body[k] !== undefined) mt[k] = str(body[k], ['notes', 'checklist'].includes(k) ? 2000 : 300);
       if (body.kind && MAINT_KINDS.includes(body.kind)) mt.kind = body.kind;
       if (body.status && MAINT_STATUS.includes(body.status)) mt.status = body.status;
+      if (body.periodMonths !== undefined) mt.periodMonths = Math.min(120, Math.max(0, Math.round(Number(body.periodMonths) || 0)));
+      if (body.cost !== undefined) mt.cost = num(body.cost);
+      if (body.durationH !== undefined) mt.durationH = num(body.durationH);
       for (const k of ['dueDate', 'doneAt']) if (body[k] !== undefined) mt[k] = date(body[k]);
       if (mt.status === 'Réalisée' && !mt.doneAt) mt.doneAt = new Date().toISOString().slice(0, 10);
+      // Maintenance récurrente : la réalisation crée la prochaine échéance (jamais la même fiche réécrite).
+      if (mt.status === 'Réalisée' && Number(mt.periodMonths) > 0 && !mt.nextId) {
+        const base = mt.doneAt || now().slice(0, 10);
+        const nextDue = addMonths(base, mt.periodMonths);
+        const following = {
+          ...mt, id: 'MNT-' + rid(6), dueDate: nextDue, doneAt: '', status: 'Planifiée',
+          nextId: '', previousId: mt.id, proof: '', cost: 0, durationH: 0,
+          createdAt: now(), updatedAt: now(), createdBy: user.login,
+          history: [{ at: now(), by: user.login, action: 'échéance suivante créée', status: 'Planifiée' }],
+        };
+        await db.put('maintenances', following.id, following);
+        mt.nextId = following.id;
+        await log(user, 'maintenance récurrente replanifiée', 'maintenance', following.id, nextDue + ' (' + mt.periodMonths + ' mois)');
+      }
       mt.updatedAt = now();
       await db.put('maintenances', mt.id, mt);
       await log(user, 'maintenance mise à jour', 'maintenance', mt.id, mt.status);
@@ -1126,6 +1220,16 @@ async function route(req) {
   // ----- Registres : carburant, entretien, barèmes, déplacements, stocks -----
   if (r0 === 'reg') return handleRegistre({ user, m, r1, r2, body, log });
 
+  // ----- RGPD et outils DPO (administrateur) -----
+  if (r0 === 'rgpd') return handleRgpd({ user, m, r1, r2, body, log });
+
+  // ----- Délégation d'accès par lien -----
+  if (r0 === 'shares') return handleShares({ user, m, r1, r2, body, log, scope });
+
+  // ----- Notifications par email -----
+  if (r0 === 'notifications') return handleNotifications({ user, m, r1, body, log });
+  if (r0 === 'preuves') return handlePreuves({ user, m, r1, r2, r3, body, log, url });
+
   // ----- Réglages entreprise -----
   if (r0 === 'settings' && r1 === 'company') {
     if (m === 'GET') return ok((await db.get('settings', 'company')) || { name: COMPANY });
@@ -1170,6 +1274,30 @@ async function route(req) {
       return ok({ months, updatedAt: now() });
     }
     return deny();
+  }
+
+  // ----- Indicateurs de stockage (volumétrie réelle côté serveur) -----
+  if (r0 === 'stats' && r1 === 'storage' && m === 'GET') {
+    if (!isAdmin) return deny('Indicateurs de stockage réservés à l\'administrateur.');
+    const perCollection = {};
+    let totalBytes = 0, totalRecords = 0;
+    for (const c of db.COLLECTIONS) {
+      const items = await db.list(c);
+      const bytes = items.reduce((n, it) => n + Buffer.byteLength(JSON.stringify(it), 'utf8'), 0);
+      perCollection[c] = { count: items.length, bytes };
+      totalBytes += bytes; totalRecords += items.length;
+    }
+    const histKeys = await db.allHistoryKeys();
+    const journal = await db.listJournal(1).catch(() => []);
+    const backupNames = await db.listBackups();
+    const photos = await db.listPhotoKeys();
+    let photoBytes = 0;
+    for (const k of photos.slice(0, 200)) { const p = await db.getKey(k).catch(() => null); if (typeof p === 'string') photoBytes += Buffer.byteLength(p, 'utf8'); }
+    return ok({
+      checkedAt: now(), collections: perCollection, totalRecords, totalBytes,
+      historyEntries: histKeys.length, backups: backupNames.length, photos: photos.length, photoBytesSampled: photoBytes,
+      journalSample: journal.length, collectionsCount: db.COLLECTIONS.length,
+    });
   }
 
   // ----- Journal, sauvegardes, export (admin) -----
