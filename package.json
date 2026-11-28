@@ -7,5 +7,9 @@
   "dependencies": {
     "@netlify/blobs": "^11.1.12",
     "@vercel/blob": "^2.9.0"
+  },
+  "scripts": {
+    "test:supabase": "node tests/supabase-smoke.mjs",
+    "migrer:supabase": "node scripts/migrer-vers-supabase.mjs"
   }
 }
