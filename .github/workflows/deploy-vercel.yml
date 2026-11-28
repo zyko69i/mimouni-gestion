@@ -40,7 +40,7 @@ jobs:
           set -euo pipefail
           node --check public/app.js
           node --check scripts/check-code.mjs
-          find api netlify -type f \\( -name '*.mjs' -o -name '*.js' \\) -print0 | xargs -0 -r -n1 node --check
+          find api netlify -type f \( -name '*.mjs' -o -name '*.js' \) -print0 | xargs -0 -r -n1 node --check
 
 # Le projet Vercel est relié au dépôt GitHub : Vercel crée les déploiements
 # Preview/Production à partir des commits. Ce workflow vérifie le code sans
