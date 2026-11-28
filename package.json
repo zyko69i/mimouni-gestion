@@ -9,6 +9,7 @@
     "@vercel/blob": "^2.9.0"
   },
   "scripts": {
+    "check:code": "node scripts/check-code.mjs",
     "test:supabase": "node tests/supabase-smoke.mjs",
     "migrer:supabase": "node scripts/migrer-vers-supabase.mjs"
   }
