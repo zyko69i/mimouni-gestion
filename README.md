@@ -37,3 +37,28 @@ présences et absences, matériel avec QR codes permanents, scanner, historique 
 - Alertes unifiées (`reg/alerts`) : CACES, DICT, sous-traitants, véhicules, frais, stocks, consignation, dérogations, dosimétrie, barèmes, sauvegardes.
 - Assistant d'exploitation basé sur les données internes : cite ses sources, aucune action, refuse les sujets sensibles, interactions journalisées.
 - Rentabilité des chantiers (administrateur) : estimation de pilotage, pas de comptabilité.
+
+## Lot 5 : RGPD, délégation, notifications, preuve (V1.7 – V1.8)
+
+- **Registre RGPD et outils DPO** (`#/rgpd`, administrateur) : registre des activités de traitement (article 30), demandes d'exercice de droits avec échéance à un mois, coordonnées du DPO, sous-traitants (article 28), revue annuelle, export JSON et CSV. Rien n'est supprimé : un traitement est archivé.
+- **Délégation d'accès par lien** (`#/partages`) : un lien donne accès à une seule fiche en lecture seule, sans données personnelles sensibles ni montants, avec durée, nombre d'ouvertures et révocation immédiate. Page publique `/partage?t=…`, accessible sans compte.
+- **Notifications par email** (Réglages) : synthèse quotidienne des alertes (habilitations, documents, maintenances, courriers, stocks, sauvegardes), destinataires, horizons réglables, envoi de test. Fournisseur Resend ; sans `RESEND_API_KEY`, rien n'est perdu : le message est conservé dans la boîte d'envoi avec son statut.
+- **Stockage et synchronisation** (`#/stockage`) : volume local, quota du navigateur, cache du service worker, file d'attente, envois refusés, volumétrie serveur par collection, synchronisation forcée, purge de la copie locale.
+- **Partie 9 — QR codes** (`#/etiquettes`) : sélection en lot, planches A4 de 24, 12 ou 6 étiquettes, étiquette seule 50 × 30 mm, export PNG, copie du lien, vérification de conformité des liens, compteur d'impressions par équipement.
+- **Partie 10 — Preuve et traçabilité** (`#/preuves`) : journal chaîné (empreinte SHA-256 du contenu + référence de l'entrée précédente), vérification d'intégrité, trace par fiche, paquet de preuve filtré par période, objet et acteur (JSON, CSV, attestation PDF). Toute altération ou suppression d'entrée casse la chaîne et devient visible.
+- **Partie 19 — Rapports et exports** (`#/rapports`) : période et site, rapport d'exploitation PDF, dix exports CSV (chantiers, heures, habilitations, documents, courriers, maintenances, stocks, équipements, absences, signalements), export complet ZIP et accès au paquet de preuve.
+- **Documents** : étiquettes, versions (l'ancienne version est conservée), revue à un an, archivage.
+- **Courriers** : référence, accusé daté, relances comptées avec prochaine relance à 7 jours.
+- **Maintenance** : périodicité, contrat, coût, durée, preuve, points de contrôle ; une maintenance récurrente réalisée crée automatiquement l'occurrence suivante.
+- **Phase 0** : documents de cadrage dans [`docs/phase-0/`](docs/phase-0/) — note de cadrage, périmètre, rôles et droits, architecture et hébergement, sécurité et RGPD, déploiement et recette, reprise et exploitation.
+
+### Variables d'environnement
+
+| Nom | Rôle | Obligatoire |
+|---|---|---|
+| `MIMOUNI_TOKEN_SECRET` | Signature des jetons de session | Oui |
+| `MIMOUNI_ADMIN_HASH` | Mot de passe administrateur initial (scrypt) | Oui |
+| `BLOB_READ_WRITE_TOKEN` | Stockage Vercel Blob | Oui (Vercel) |
+| `CRON_SECRET` | Protection du cron de sauvegarde | Oui |
+| `RESEND_API_KEY` | Envoi des emails de synthèse | Non |
+| `GROQ_API_KEY` | Assistant d'exploitation | Non |
