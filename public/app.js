@@ -2,7 +2,7 @@
    JavaScript sans framework. Données : API /api (Netlify) + copie locale IndexedDB pour le hors ligne. */
 'use strict';
 const COMPANY = 'MIMOUNI INDUSTRIEL ÉLECTRICITÉ';
-const APP_VERSION = '1.1.0';
+const APP_VERSION = '1.2.0';
 
 // ---------------- utilitaires ----------------
 const $ = (s, el = document) => el.querySelector(s);
@@ -99,7 +99,7 @@ async function api(method, path, body, opts = {}) {
   setOnline(true);
   const data = await r.json().catch(() => ({}));
   if (r.status === 401 && path !== 'login') { logout(true); throw new Error('Session expirée, reconnectez-vous.'); }
-  if (!r.ok) { const err = new Error(data.error || 'Erreur ' + r.status); err.status = r.status; throw err; }
+  if (!r.ok) { const err = new Error(data.error || 'Erreur ' + r.status); err.status = r.status; err.data = data; throw err; }
   return data;
 }
 
@@ -376,6 +376,20 @@ function currentHabs(t) {
   (t.habilitations || []).forEach((hb) => { const k = hb.kind + '|' + hb.symbol; const prev = m.get(k); if (!prev || (hb.expires || '') > (prev.expires || '')) m.set(k, hb); });
   return [...m.values()];
 }
+const DECLARED = ['confirmé', 'à vérifier', 'suspendu', 'retiré', 'en attente'];
+// Statuts de conformité (3.3.bis) : calculé (dates + justificatif) et déclaré (responsable), toujours affichés ensemble.
+function habCompliance(hb) {
+  const declared = DECLARED.includes(hb.declared) ? hb.declared : 'à vérifier';
+  const n = hb.expires ? daysUntil(hb.expires) : null;
+  let calculated = 'valide';
+  if (n !== null && n < 0) calculated = 'expiré';
+  else if (!hb.proof) calculated = 'sans justificatif';
+  else if (n !== null && n <= 90) calculated = 'à échéance proche';
+  const compliant = (calculated === 'valide' || calculated === 'à échéance proche') && declared === 'confirmé';
+  return { calculated, declared, compliant };
+}
+const calcPill = (c) => `<span class="pill ${c === 'valide' ? 'green' : c === 'à échéance proche' ? 'orange' : 'red'}">${esc(c)}</span>`;
+const declPill = (d) => `<span class="pill ${d === 'confirmé' ? 'green' : d === 'en attente' || d === 'à vérifier' ? 'orange' : 'red'}">déclaré : ${esc(d)}</span>`;
 function habAlerts() {
   const out = [];
   D().technicians.forEach((t) => currentHabs(t).forEach((hb) => { const st = habStatus(hb); if (st.level >= 1) out.push({ t, hb, st }); }));
@@ -398,8 +412,8 @@ const habSymbols = () => [...new Set(DF().technicians.flatMap((t) => (t.habilita
 function habTable(t, editable = false) {
   const list = currentHabs(t);
   if (!list.length) return '<p class="muted">Aucune habilitation enregistrée.</p>';
-  return `<div class="table-wrap"><table><thead><tr><th>Type</th><th>Symbole</th><th>Délivrée</th><th>Fin de validité</th><th>État</th>${editable && isAdmin() ? '<th data-nosort></th>' : ''}</tr></thead><tbody>
-    ${list.map((hb) => { const st = habStatus(hb); return `<tr ${editable && isAdmin() ? `class="click" data-hab="${esc(hb.id)}"` : ''}><td class="small">${esc(hb.kind || '–')}</td><td><b>${esc(hb.symbol || '–')}</b></td><td class="small">${fmtD(hb.issued)}</td><td class="small">${fmtD(hb.expires)}</td><td><span class="pill ${st.cls}">${esc(st.label)}</span></td>${editable && isAdmin() ? `<td><button class="btn sm" data-habdel="${esc(hb.id)}" title="Retirer cette habilitation">Retirer</button></td>` : ''}</tr>`; }).join('')}
+  return `<div class="table-wrap"><table><thead><tr><th>Type</th><th>Symbole</th><th>Délivrée</th><th>Fin de validité</th><th>Justificatif</th><th>État calculé / déclaré</th>${editable && isAdmin() ? '<th data-nosort></th>' : ''}</tr></thead><tbody>
+    ${list.map((hb) => { const st = habStatus(hb); return `<tr ${editable && isAdmin() ? `class="click" data-hab="${esc(hb.id)}"` : ''}><td class="small">${esc(hb.kind || '–')}</td><td><b>${esc(hb.symbol || '–')}</b></td><td class="small">${fmtD(hb.issued)}</td><td class="small">${fmtD(hb.expires)}</td><td class="small">${esc(hb.proof || '–')}</td><td><span class="pill ${st.cls}">${esc(st.label)}</span> ${calcPill(habCompliance(hb).calculated)} ${declPill(habCompliance(hb).declared)}</td>${editable && isAdmin() ? `<td><button class="btn sm" data-habstat="${esc(hb.id)}">Statut</button> <button class="btn sm" data-habdel="${esc(hb.id)}" title="Retirer cette habilitation">Retirer</button></td>` : ''}</tr>`; }).join('')}
   </tbody></table></div>`;
 }
 function allConflicts() {
@@ -763,7 +777,7 @@ async function render() {
   const elCrumb = $('#tb-crumb-page'); if (elCrumb) elCrumb.textContent = label;
   const view = $('#view');
   const fn = ROUTES[key] || ROUTES.home;
-  try { await fn(view, decodeURIComponent(id)); }
+  try { await fn(view, decodeURIComponent(id)); const mw = moduleWarningsHTML(key); if (mw) view.insertAdjacentHTML('afterbegin', mw); }
   catch (e) { view.innerHTML = `<div class="card"><p class="err">${esc(e.message)}</p></div>`; }
   window.scrollTo(0, 0);
 }
@@ -823,6 +837,72 @@ function seniority(entryDate) {
   if (months > 0) return `${months} mois`;
   const days = Math.floor((now - start) / 86400000);
   return days <= 0 ? 'Aujourd\'hui' : `${days} jour${days > 1 ? 's' : ''}`;
+}
+
+// Anniversaires (Partie 40) : naissance et ancienneté, sur les 30 prochains jours.
+function anniversaries(horizon = 30) {
+  const out = []; const today = parseD(todayISO());
+  const next = (dateStr) => { if (!dateStr) return null; const d0 = parseD(dateStr); let d = new Date(today.getFullYear(), d0.getMonth(), d0.getDate()); if (d < today) d = new Date(today.getFullYear() + 1, d0.getMonth(), d0.getDate()); return { d, years: d.getFullYear() - d0.getFullYear() }; };
+  (DF().technicians || []).filter((t) => t.active !== false).forEach((t) => {
+    [['birthDate', 'anniversaire'], ['entryDate', 'ancienneté']].forEach(([k, kind]) => {
+      const n = next(t[k]); if (!n) return;
+      const days = Math.round((n.d - today) / 864e5);
+      if (days <= horizon && (kind === 'anniversaire' || n.years > 0)) out.push({ t, kind, days, years: n.years, date: iso(n.d) });
+    });
+  });
+  return out.sort((a, b) => a.days - b.days);
+}
+function anniversariesCard() {
+  if (isTech()) return '';
+  const list = anniversaries(30).filter((x) => x.kind !== 'anniversaire' || isAdmin() || isChef());
+  const rows = list.slice(0, 8).map((x) => `<a class="item" href="#/technicien/${x.t.id}" style="text-decoration:none;color:inherit"><span style="flex:1;min-width:0"><b>${esc(x.t.firstName + ' ' + x.t.lastName)}</b> · ${x.kind === 'anniversaire' ? 'anniversaire' : x.years + ' an' + (x.years > 1 ? 's' : '') + ' d\'ancienneté'}</span><span class="pill ${x.days === 0 ? 'green' : ''}">${x.days === 0 ? 'Aujourd\'hui' : x.days === 1 ? 'Demain' : fmtD(x.date)}</span></a>`).join('');
+  return `<div class="card section"><h2>${ICON.bell} Anniversaires et ancienneté</h2><p class="muted small" style="margin:-.3rem 0 .9rem">Les 30 prochains jours (dates de naissance et d'entrée des fiches).</p>${rows ? `<div class="list">${rows}</div>` : '<div class="empty">Aucun anniversaire à venir. Renseignez les dates dans les fiches techniciens.</div>'}</div>`;
+}
+// Avertissements visibles par module (Partie 39) : bandeau en tête de chaque module concerné.
+function moduleWarnings(key) {
+  if (isTech()) return [];
+  const w = [];
+  const habBad = [];
+  D().technicians.filter((t) => t.active !== false).forEach((t) => currentHabs(t).forEach((hb) => { const c = habCompliance(hb); if (!c.compliant) habBad.push({ t, hb, c }); }));
+  const expired = habBad.filter((x) => x.c.calculated === 'expiré').length;
+  const noProof = habBad.filter((x) => x.c.calculated === 'sans justificatif').length;
+  const toCheck = habBad.filter((x) => x.c.declared === 'à vérifier' || x.c.declared === 'en attente').length;
+  if (key === 'techniciens' || key === 'habilitations' || key === 'technicien') {
+    if (expired) w.push({ cls: 'red', msg: `${expired} habilitation${expired > 1 ? 's' : ''} expirée${expired > 1 ? 's' : ''} : affectation bloquée tant qu'elle n'est pas renouvelée.`, href: '#/habilitations' });
+    if (noProof) w.push({ cls: 'orange', msg: `${noProof} habilitation${noProof > 1 ? 's' : ''} sans justificatif : non conforme${noProof > 1 ? 's' : ''}, jamais présentée${noProof > 1 ? 's' : ''} comme valide${noProof > 1 ? 's' : ''}.` });
+    if (toCheck) w.push({ cls: 'orange', msg: `${toCheck} habilitation${toCheck > 1 ? 's' : ''} à vérifier ou en attente de confirmation par le responsable.` });
+  }
+  if (key === 'planning') {
+    const n = allConflicts().length; if (n) w.push({ cls: 'red', msg: `${n} conflit${n > 1 ? 's' : ''} de planning à traiter (double affectation, absence, habilitation).` });
+    if (expired) w.push({ cls: 'red', msg: `${expired} technicien${expired > 1 ? 's' : ''} avec une habilitation expirée : affectation refusée par le serveur sauf dérogation QHSE écrite.` });
+  }
+  if (key === 'materiel') { const n = D().equipment.filter((e) => e.nextControl && daysUntil(e.nextControl) < 0).length; if (n) w.push({ cls: 'red', msg: `${n} équipement${n > 1 ? 's' : ''} avec contrôle périodique dépassé.` }); }
+  if (key === 'documents') { const n = docAlerts().length; if (n) w.push({ cls: 'orange', msg: `${n} document${n > 1 ? 's' : ''} à réviser ou périmé${n > 1 ? 's' : ''}.` }); }
+  if (key === 'maintenance') { const a = maintAlerts().length, b = openReports().length; if (a) w.push({ cls: 'red', msg: `${a} maintenance${a > 1 ? 's' : ''} en retard ou à traiter.` }); if (b) w.push({ cls: 'orange', msg: `${b} signalement${b > 1 ? 's' : ''} ouvert${b > 1 ? 's' : ''}.` }); }
+  if (key === 'vehicules') { const n = (D().vehicles || []).filter((x) => [x.ct, x.insurance].some((d) => d && daysUntil(d) < 0)).length; if (n) w.push({ cls: 'red', msg: `${n} véhicule${n > 1 ? 's' : ''} avec contrôle technique ou assurance dépassé${n > 1 ? 'e' : 'e'}.` }); }
+  return w;
+}
+function moduleWarningsHTML(key) {
+  const w = moduleWarnings(key); if (!w.length) return '';
+  return `<div class="module-warn" role="alert">${w.map((x) => `<div class="mw ${x.cls}">${ICON.alert}<span>${esc(x.msg)}</span>${x.href ? `<a href="${x.href}">Voir</a>` : ''}</div>`).join('')}</div>`;
+}
+// Export fiche complète intégrale (Partie 42) : JSON complet + version imprimable (PDF via impression).
+async function exportFiche(t, mode) {
+  const d = await api('GET', `technicians/${t.id}/export`);
+  const name = `fiche-${(t.lastName || 't').toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${todayISO()}`;
+  if (mode === 'json') { download(name + '.json', new Blob([JSON.stringify(d, null, 2)], { type: 'application/json' })); return; }
+  const x = d.technician; const rows = (a, f) => a.length ? a.map(f).join('') : '<tr><td colspan="6">Aucun</td></tr>';
+  const w = window.open('', '_blank'); if (!w) { toast('Autorisez les fenêtres pop-up pour imprimer.'); return; }
+  w.document.write(`<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>${esc(name)}</title><style>body{font:13px Arial,sans-serif;margin:24px;color:#111}h1{font-size:20px}h2{font-size:15px;margin-top:20px;border-bottom:1px solid #999}table{border-collapse:collapse;width:100%}td,th{border:1px solid #bbb;padding:4px 6px;text-align:left;font-size:12px}</style></head><body>
+  <h1>${esc(COMPANY)} — Fiche complète : ${esc(x.firstName + ' ' + x.lastName)}</h1><p>Exportée le ${fmtDT(d.exportedAt)} par ${esc(d.exportedBy)}</p>
+  <h2>Identité et poste</h2><table><tr><th>Poste</th><td>${esc(x.position || '–')}</td><th>Métier</th><td>${esc(x.metier || '–')}</td></tr><tr><th>Site</th><td>${esc(siteName(x.siteId))}</td><th>Entrée</th><td>${fmtD(x.entryDate)} ${x.entryDate ? '(' + seniority(x.entryDate) + ')' : ''}</td></tr><tr><th>Naissance</th><td>${fmtD(x.birthDate)}</td><th>Contact</th><td>${esc(x.phone || '')} ${esc(x.email || '')}</td></tr><tr><th>Compétences</th><td colspan="3">${esc((x.skills || []).join(', ') || '–')}</td></tr></table>
+  <h2>Habilitations (statut calculé / déclaré)</h2><table><tr><th>Type</th><th>Symbole</th><th>Fin de validité</th><th>Justificatif</th><th>Calculé</th><th>Déclaré</th></tr>${rows(d.habilitations, (h) => `<tr><td>${esc(h.kind)}</td><td>${esc(h.symbol)}</td><td>${fmtD(h.expires)}</td><td>${esc(h.proof || '–')}</td><td>${esc(h.conformite.calculated)}</td><td>${esc(h.conformite.declared)}</td></tr>`)}</table>
+  <h2>Affectations</h2><table><tr><th>Date</th><th>Créneau</th><th>Chantier</th><th>Dérogation QHSE</th></tr>${rows(d.assignments, (a) => `<tr><td>${fmtD(a.date)}</td><td>${esc(a.slot)}</td><td>${esc((chantierById(a.chantierId) || {}).name || a.chantierId || '–')}</td><td>${a.derogation ? esc(a.derogation.reason + ' (jusqu\'au ' + fmtD(a.derogation.until) + ')') : ''}</td></tr>`)}</table>
+  <h2>Absences</h2><table><tr><th>Type</th><th>Début</th><th>Fin</th><th>Statut</th></tr>${rows(d.absences, (a) => `<tr><td>${esc(a.type)}</td><td>${fmtD(a.start)}</td><td>${fmtD(a.end)}</td><td>${esc(a.status || '')}</td></tr>`)}</table>
+  <h2>Feuilles d'heures</h2><p>${d.timesheets.length} feuille(s) enregistrée(s).</p>
+  <h2>Journal des actions sur cette fiche</h2><table><tr><th>Date</th><th>Auteur</th><th>Action</th><th>Détail</th></tr>${rows(d.journal, (j) => `<tr><td>${fmtDT(j.at)}</td><td>${esc(j.who)}</td><td>${esc(j.action)}</td><td>${esc(j.detail || '')}</td></tr>`)}</table>
+  <script>setTimeout(()=>print(),300)<\/script></body></html>`);
+  w.document.close();
 }
 
 function presentToday() {
@@ -932,6 +1012,7 @@ ROUTES.home = async (v) => {
       ${alertsRows}
     </div>
   </div>
+  ${anniversariesCard()}
   <div class="grid g2 section">
     <div class="card">
       <h2>${ICON.clock} Heures prévues et réalisées</h2>
@@ -1087,9 +1168,11 @@ function chantierForm(c = null) {
       { name: 'endPlanned', label: 'Date de fin prévue', type: 'date', value: c?.endPlanned },
       { name: 'status', label: 'Statut', type: 'select', options: ['En préparation', 'En cours', 'Clôture proposée', 'Clôturé'], value: c?.status || 'En préparation' },
       { name: 'team', label: 'Équipe', type: 'checks', options: D().technicians.filter((t) => t.active !== false).map((t) => [t.id, t.firstName + ' ' + t.lastName]), value: c?.team || [] },
+      { name: 'critical', label: 'Chantier critique (tout élément non conforme bloque l\'affectation)', type: 'select', options: [['0', 'Non'], ['1', 'Oui, critique']], value: c?.critical ? '1' : '0' },
       { name: 'description', label: 'Description', type: 'textarea', value: c?.description },
     ],
     onSubmit: async (vals) => {
+      vals.critical = vals.critical === '1';
       const r = c ? await api('PUT', 'chantiers/' + c.id, vals) : await api('POST', 'chantiers', vals);
       toast(c ? 'Chantier modifié' : 'Chantier créé'); await loadData(); location.hash = '#/chantier/' + r.id; render();
     },
@@ -1263,7 +1346,8 @@ ROUTES.planning = async (v) => {
   $('[data-today]', v).onclick = () => { PL.anchor = todayISO(); render(); };
   document.getElementById('new-inter').onclick = () => openInterventionForm();
 };
-function openInterventionForm() {
+function assignForm(techId) { openInterventionForm(techId); }
+function openInterventionForm(preTech = '') {
   const techs = D().technicians.filter(t => t.active !== false);
   const chs = D().chantiers;
   const m = modal(`<div class="head"><h2>Nouvelle intervention</h2><button class="btn" data-close>×</button></div>
@@ -1283,14 +1367,26 @@ function openInterventionForm() {
         </div>
         <input type="hidden" name="slot" id="slot-val" value="08:00-12:00">
       </div>
-      <div><label style="display:block;font-size:0.85rem;margin-bottom:0.25rem">Technicien</label><select name="techId" style="width:100%;padding:0.5rem;border:1px solid #D1D5DB;border-radius:8px;font-size:16px">${techs.map(t => `<option value="${t.id}">${esc(t.firstName + ' ' + t.lastName)}</option>`).join('')}</select></div>
+      <div><label style="display:block;font-size:0.85rem;margin-bottom:0.25rem">Technicien</label><select name="techId" style="width:100%;padding:0.5rem;border:1px solid #D1D5DB;border-radius:8px;font-size:16px">${techs.map(t => `<option value="${t.id}" ${t.id === preTech ? 'selected' : ''}>${esc(t.firstName + ' ' + t.lastName)}</option>`).join('')}</select></div>
       <div><label style="display:block;font-size:0.85rem;margin-bottom:0.25rem">Statut</label><select name="status" style="width:100%;padding:0.5rem;border:1px solid #D1D5DB;border-radius:8px;font-size:16px"><option>Planifié</option><option>En attente</option><option>Terminé</option></select></div>
       <div class="actions"><button type="button" class="btn" data-close>Annuler</button><button class="btn primary" type="submit">Enregistrer</button></div>
     </form>`, { close: true });
   document.getElementById('inter-form').onsubmit = async (e) => {
     e.preventDefault();
     const fd = new FormData(e.target);
-    await api('POST', 'assignments', { techId: fd.get('techId'), chantierId: fd.get('chantierId') || null, date: fd.get('date'), slot: fd.get('slot') || '', status: fd.get('status'), name: fd.get('name') });
+    const payload = { techId: fd.get('techId'), chantierId: fd.get('chantierId') || null, date: fd.get('date'), slot: fd.get('slot') || '', status: fd.get('status'), name: fd.get('name') };
+    try { await api('POST', 'assignments', payload); }
+    catch (err) {
+      if (err.status === 409 && err.data && err.data.code === 'NON_CONFORME') {
+        if (!err.data.derogationPossible) { toast(err.message, 7000); return; }
+        const reason = prompt(err.message + '\n\nDérogation QHSE : saisissez le motif écrit (obligatoire) ou laissez vide pour annuler.');
+        if (!reason) return;
+        const until = prompt('Date de fin de validité de la dérogation (AAAA-MM-JJ) :', payload.date);
+        if (!until) return;
+        try { await api('POST', 'assignments', { ...payload, derogation: { reason, until } }); toast('Affectation enregistrée avec dérogation QHSE tracée'); }
+        catch (e2) { toast(e2.message, 6000); return; }
+      } else { toast(err.message, 6000); return; }
+    }
     m.remove(); await loadData(); render();
   };
   document.querySelectorAll('[data-slot]').forEach(b => b.onclick = () => {
@@ -1333,6 +1429,7 @@ function techForm(t = null) {
     { name: 'phone', label: 'Téléphone', type: 'tel', value: t?.phone },
     { name: 'email', label: 'Email', type: 'email', value: t?.email }, { name: 'address', label: 'Adresse (visible admin seul)', value: t?.address },
     { name: 'entryDate', label: 'Date d\'entrée', type: 'date', value: t?.entryDate },
+    { name: 'birthDate', label: 'Date de naissance (anniversaire, visible admin)', type: 'date', value: t?.birthDate },
     { name: 'skills', label: 'Compétences (séparées par des virgules)', value: (t?.skills || []).join(', '), placeholder: 'Automatisme, HTA/BT, câblage armoire, variation de vitesse…' },
     { name: 'photo', label: 'Photo de profil', type: 'photos', capture: true },
     { name: 'active', label: 'Statut', type: 'select', options: [['1', 'Actif'], ['0', 'Inactif (parti)']], value: t && t.active === false ? '0' : '1' },
@@ -1350,7 +1447,7 @@ ROUTES.technicien = async (v, id) => {
   const as = D().assignments.filter((a) => a.techId === t.id && a.date >= todayISO()).sort((a, b) => a.date.localeCompare(b.date)).slice(0, 15);
   const abs = D().absences.filter((a) => a.techId === t.id).sort((a, b) => b.start.localeCompare(a.start));
   const tasks = D().tasks.filter((x) => x.assignee === t.id);
-  v.innerHTML = `<div class="head"><div>${!isTech() ? '<a href="#/techniciens" class="small">← Techniciens</a>' : ''}<h1>${esc(t.firstName + ' ' + t.lastName)}${demoTag(t)}</h1></div>${isAdmin() ? '<div class="row"><button class="btn sm" id="edit-t">Modifier</button><button class="btn sm primary" id="add-hab">+ Habilitation</button><button class="btn sm" style="background:#DC2626;color:#fff" id="del-t">Supprimer</button></div>' : ''}</div>
+  v.innerHTML = `<div class="head"><div>${!isTech() ? '<a href="#/techniciens" class="small">← Techniciens</a>' : ''}<h1>${esc(t.firstName + ' ' + t.lastName)}${demoTag(t)}</h1></div>${isAdmin() ? '<div class="row"><button class="btn sm" id="edit-t">Modifier</button><button class="btn sm" id="exp-json">Exporter la fiche</button><button class="btn sm" id="exp-pdf">Imprimer / PDF</button><button class="btn sm primary" id="add-hab">+ Habilitation</button><button class="btn sm" style="background:#DC2626;color:#fff" id="del-t">Supprimer</button></div>' : ''}</div>
   <div class="grid g2">
     <div class="card" style="text-align:center">
       ${t.photo ? `<img src="${esc(t.photo)}" alt="Photo" style="width:140px;height:140px;object-fit:cover;border-radius:50%;border:4px solid var(--navy);margin-bottom:1rem">` : `<div style="width:140px;height:140px;border-radius:50%;background:#E2E8F0;margin:0 auto 1rem;display:flex;align-items:center;justify-content:center;font-size:3rem;color:var(--navy)">${esc((t.firstName||'')[0]||'')}${(t.lastName||'')[0]||''}</div>`}
@@ -1364,11 +1461,21 @@ ROUTES.technicien = async (v, id) => {
     <div class="card"><h2>Historique des tâches</h2>${tasks.map((x) => `<div class="list"><div class="item"><a href="#/chantier/${x.chantierId}">${esc(x.title)}</a><span>${statusPill(x.status)} ${h(realH(x))}</span></div></div>`).join('') || '<p class="muted">Aucune.</p>'}</div>
   </div>`;
   const e1 = $('#edit-t', v); if (e1) e1.onclick = () => techForm(t);
+  const xj = $('#exp-json', v); if (xj) xj.onclick = () => exportFiche(t, 'json').catch((e) => toast(e.message));
+  const xp = $('#exp-pdf', v); if (xp) xp.onclick = () => exportFiche(t, 'pdf').catch((e) => toast(e.message));
   const eDel = $('#del-t', v); if (eDel) eDel.onclick = async () => { if (await confirmBox(`Supprimer définitivement le technicien ${esc(t.firstName + ' ' + t.lastName)} ? Cette action est irréversible.`, 'Supprimer')) { await api('DELETE', 'technicians/' + t.id); toast('Technicien supprimé'); location.hash = '#/techniciens'; refresh(); } };
   const addHab = $('#add-hab-icon', v); if (addHab) addHab.onclick = () => { const e2 = $('#add-hab', v); if (e2) e2.click(); else formModal({ title: 'Ajouter / renouveler une habilitation', fields: [{ name: 'kind', label: 'Type (choisir ou saisir un nouveau référentiel)', type: 'datalist', options: HAB_KINDS, value: 'Électrique (NF C 18-510)' }, { name: 'symbol', label: 'Symbole / catégorie (choisir ou saisir)', type: 'datalist', options: habSymbols(), required: true, placeholder: 'B2V BR, SC2, R486 B…' }, { name: 'issued', label: 'Date de délivrance', type: 'date' }, { name: 'expires', label: 'Fin de validité', type: 'date', required: true }, { name: 'org', label: 'Organisme' }], onSubmit: async (vals) => { await api('POST', `technicians/${t.id}/habilitations`, vals); toast('Habilitation ajoutée'); refresh(); } }); };
   const addAs = $('#add-as-icon', v); if (addAs) addAs.onclick = () => assignForm(t.id);
   const addAbs = $('#add-abs-icon', v); if (addAbs) addAbs.onclick = () => formModal({ title: 'Signaler une absence', fields: [{ name: 'type', label: 'Type', type: 'select', options: [['maladie', 'Maladie'], ['congé', 'Congé'], ['retard', 'Retard'], ['absence', 'Absence']] }, { name: 'start', label: 'Début', type: 'date', required: true }, { name: 'end', label: 'Fin', type: 'date' }, { name: 'motif', label: 'Motif', type: 'textarea' }], onSubmit: async (vals) => { await api('POST', 'absences', { ...vals, techId: t.id }); toast('Absence signalée'); refresh(); } });
-  $$('[data-hab]', v).forEach((tr) => (tr.onclick = () => { if (isAdmin()) { const hb = (t.habilitations || []).find(h => h.id === tr.dataset.hab); if (hb) formModal({ title: 'Renouveler / modifier l\'habilitation', fields: [{ name: 'kind', label: 'Type (choisir ou saisir un nouveau référentiel)', type: 'datalist', options: HAB_KINDS, value: hb.kind }, { name: 'symbol', label: 'Symbole (choisir ou saisir)', type: 'datalist', options: habSymbols(), value: hb.symbol, required: true }, { name: 'issued', label: 'Date de délivrance', type: 'date', value: hb.issued }, { name: 'expires', label: 'Fin de validité', type: 'date', value: hb.expires, required: true }, { name: 'org', label: 'Organisme', value: hb.org }], onSubmit: async (vals) => { await api('POST', `technicians/${t.id}/habilitations`, vals); toast('Habilitation mise à jour'); refresh(); } }); } }));
+  $$('[data-hab]', v).forEach((tr) => (tr.onclick = () => { if (isAdmin()) { const hb = (t.habilitations || []).find(h => h.id === tr.dataset.hab); if (hb) formModal({ title: 'Renouveler / modifier l\'habilitation', fields: [{ name: 'kind', label: 'Type (choisir ou saisir un nouveau référentiel)', type: 'datalist', options: HAB_KINDS, value: hb.kind }, { name: 'symbol', label: 'Symbole (choisir ou saisir)', type: 'datalist', options: habSymbols(), value: hb.symbol, required: true }, { name: 'issued', label: 'Date de délivrance', type: 'date', value: hb.issued }, { name: 'expires', label: 'Fin de validité', type: 'date', value: hb.expires, required: true }, { name: 'org', label: 'Organisme', value: hb.org }, { name: 'proof', label: 'Justificatif (référence du document)', value: hb.proof }, { name: 'declared', label: 'Statut déclaré par le responsable', type: 'select', options: DECLARED, value: 'à vérifier' }], onSubmit: async (vals) => { await api('POST', `technicians/${t.id}/habilitations`, vals); toast('Habilitation mise à jour'); refresh(); } }); } }));
+  $$('[data-habstat]', v).forEach((b) => (b.onclick = (e) => {
+    e.stopPropagation();
+    const hb = (t.habilitations || []).find((x) => x.id === b.dataset.habstat); if (!hb) return;
+    formModal({ title: 'Statut de conformité – ' + (hb.symbol || hb.kind), intro: `<p class="muted small">Statut calculé actuel : <b>${esc(habCompliance(hb).calculated)}</b>. Une habilitation sans justificatif ou à vérifier est traitée comme non conforme. Le changement est journalisé (avant / après).</p>`, fields: [
+      { name: 'proof', label: 'Justificatif (référence du document)', value: hb.proof },
+      { name: 'declared', label: 'Statut déclaré', type: 'select', options: DECLARED, value: hb.declared || 'à vérifier' },
+    ], onSubmit: async (vals) => { await api('PUT', `technicians/${t.id}/habilitations/${hb.id}`, vals); toast('Statut enregistré'); refresh(); } });
+  }));
   $$('[data-habdel]', v).forEach((b) => (b.onclick = async (e) => {
     e.stopPropagation();
     if (await confirmBox('Retirer cette habilitation de la fiche ? Les interventions déjà enregistrées restent inchangées.', 'Retirer')) {
@@ -1380,6 +1487,7 @@ ROUTES.technicien = async (v, id) => {
   const e2 = $('#add-hab', v); if (e2) e2.onclick = () => formModal({ title: 'Ajouter / renouveler une habilitation', fields: [
     { name: 'kind', label: 'Type (choisir ou saisir un nouveau référentiel)', type: 'datalist', options: HAB_KINDS, value: 'Électrique (NF C 18-510)' }, { name: 'symbol', label: 'Symbole / catégorie (ex. B2V BR, R486 B, Opérateur)', type: 'datalist', options: habSymbols(), required: true },
     { name: 'issued', label: 'Date de délivrance', type: 'date' }, { name: 'expires', label: 'Fin de validité', type: 'date', required: true }, { name: 'org', label: 'Organisme' },
+    { name: 'proof', label: 'Justificatif (référence du document, n° de titre)', placeholder: 'Sans justificatif, jamais présenté comme valide' }, { name: 'declared', label: 'Statut déclaré par le responsable', type: 'select', options: DECLARED, value: 'à vérifier' },
   ], onSubmit: async (vals) => { await api('POST', `technicians/${t.id}/habilitations`, vals); toast('Habilitation enregistrée'); refresh(); } });
 };
 
@@ -2150,6 +2258,7 @@ function habForm(techId = '') {
     { name: 'issued', label: 'Date de délivrance', type: 'date', value: todayISO() },
     { name: 'expires', label: 'Fin de validité', type: 'date', required: true },
     { name: 'org', label: 'Organisme', placeholder: 'Apave, EDF, interne…' },
+    { name: 'proof', label: 'Justificatif (référence du document, n° de titre)', placeholder: 'Sans justificatif, jamais présenté comme valide' }, { name: 'declared', label: 'Statut déclaré par le responsable', type: 'select', options: DECLARED, value: 'à vérifier' },
   ], submitLabel: 'Ajouter', onSubmit: async (vals) => {
     const id = vals.techId; delete vals.techId;
     await api('POST', `technicians/${id}/habilitations`, vals);

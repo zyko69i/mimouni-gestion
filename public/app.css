@@ -1257,3 +1257,11 @@ table.hm tbody tr:last-child td { border-bottom: 0; }
   .site-filter select { max-width: 110px; font-size: .78rem; }
   .toolbar select.inp { min-width: 120px; }
 }
+
+/* Avertissements visibles par module (Partie 39) */
+.module-warn{display:flex;flex-direction:column;gap:.5rem;margin-bottom:1rem}
+.module-warn .mw{display:flex;align-items:center;gap:.6rem;padding:.65rem .9rem;border-radius:10px;font-size:.92rem;border:1px solid #FCD34D;background:#FFFBEB;color:#78350F}
+.module-warn .mw.red{border-color:#FCA5A5;background:#FEF2F2;color:#7F1D1D}
+.module-warn .mw svg{flex:none;width:18px;height:18px}
+.module-warn .mw span{flex:1}
+.module-warn .mw a{font-weight:600;text-decoration:underline;color:inherit}

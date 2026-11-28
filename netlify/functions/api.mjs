@@ -175,7 +175,7 @@ function techFields(b, prev = {}) {
     firstName: str(b.firstName ?? prev.firstName, 80), lastName: str(b.lastName ?? prev.lastName, 80),
     phone: str(b.phone ?? prev.phone, 40), email: str(b.email ?? prev.email, 120), address: str(b.address ?? prev.address, 250),
     position: str(b.position ?? prev.position, 80), entryDate: date(b.entryDate ?? prev.entryDate),
-    metier: str(b.metier ?? prev.metier, 60), siteId: str(b.siteId ?? prev.siteId, 20),
+    birthDate: date(b.birthDate ?? prev.birthDate), metier: str(b.metier ?? prev.metier, 60), siteId: str(b.siteId ?? prev.siteId, 20),
     managerId: str(b.managerId ?? prev.managerId, 40),
     skills: Array.isArray(b.skills) ? b.skills.map((s) => str(s, 60)).filter(Boolean).slice(0, 30) : (prev.skills || []),
     notes: str(b.notes ?? prev.notes, 1000), active: b.active === undefined ? (prev.active ?? true) : !!b.active,
@@ -185,7 +185,37 @@ function techFields(b, prev = {}) {
 function habFields(b) {
   // Le type est libre : un nouveau référentiel peut être saisi sans redéploiement.
   const kind = str(b.kind, 60) || 'Autre';
-  return { id: rid(), kind, symbol: str(b.symbol, 60), issued: date(b.issued), expires: date(b.expires), org: str(b.org, 120), addedAt: now() };
+  return { id: rid(), kind, symbol: str(b.symbol, 60), issued: date(b.issued), expires: date(b.expires), org: str(b.org, 120), proof: str(b.proof, 200), declared: DECLARED.includes(b.declared) ? b.declared : 'à vérifier', addedAt: now() };
+}
+// Statuts de conformité (3.3.bis) : statut calculé (dates + justificatif) et statut déclaré (responsable).
+const DECLARED = ['confirmé', 'à vérifier', 'suspendu', 'retiré', 'en attente'];
+const dayDiff = (a, b) => Math.round((new Date(a + 'T00:00:00Z') - new Date(b + 'T00:00:00Z')) / 864e5);
+export function habCompliance(h, onDate) {
+  const day = onDate || new Date().toISOString().slice(0, 10);
+  const declared = DECLARED.includes(h.declared) ? h.declared : 'à vérifier';
+  let calculated = 'valide';
+  const n = h.expires ? dayDiff(h.expires, day) : null;
+  if (n !== null && n < 0) calculated = 'expiré';
+  else if (!h.proof) calculated = 'sans justificatif';
+  else if (n !== null && n <= 90) calculated = 'à échéance proche';
+  // Règle absolue : sans justificatif ou à vérifier, jamais présenté comme valide.
+  const compliant = (calculated === 'valide' || calculated === 'à échéance proche') && declared === 'confirmé';
+  const hardBlock = calculated === 'expiré' || declared === 'suspendu' || declared === 'retiré';
+  return { calculated, declared, compliant, hardBlock };
+}
+function currentHabsOf(tech) {
+  const m = new Map();
+  (tech?.habilitations || []).forEach((h) => { const k = h.kind + '|' + h.symbol; const p = m.get(k); if (!p || (h.expires || '') > (p.expires || '')) m.set(k, h); });
+  return [...m.values()];
+}
+// Non-conformités d'un technicien à une date. Chantier critique : tout élément non conforme bloque.
+export function complianceIssues(tech, day, critical) {
+  const out = [];
+  currentHabsOf(tech).forEach((h) => {
+    const c = habCompliance(h, day);
+    if (c.hardBlock || (critical && !c.compliant)) out.push((h.symbol || h.kind) + ' : ' + c.calculated + ' / déclaré ' + c.declared);
+  });
+  return out;
 }
 
 // ---------- Conflits de planning ----------
@@ -410,6 +440,31 @@ async function route(req) {
       await log(user, 'habilitation ajoutée', 'technicien', t.id, h.kind + ' ' + h.symbol + ' → ' + h.expires);
       return ok(t);
     }
+    if (m === 'PUT' && r1 && r2 === 'habilitations' && r3) {
+      if (!isAdmin) return deny();
+      const t = await db.get('technicians', r1); if (!t) return notFound();
+      const h = (t.habilitations || []).find((x) => x.id === r3); if (!h) return notFound();
+      const before = { declared: h.declared || 'à vérifier', proof: h.proof || '' };
+      if (body.declared !== undefined) { if (!DECLARED.includes(body.declared)) return bad('Statut déclaré inconnu.'); h.declared = body.declared; }
+      if (body.proof !== undefined) h.proof = str(body.proof, 200);
+      h.declaredBy = user.login; h.declaredAt = now(); t.updatedAt = now();
+      await db.put('technicians', t.id, t);
+      await log(user, 'statut habilitation modifié', 'technicien', t.id, (h.symbol || h.kind) + ' avant ' + JSON.stringify(before) + ' après ' + JSON.stringify({ declared: h.declared, proof: h.proof || '' }));
+      return ok(t);
+    }
+    if (m === 'GET' && r1 && r2 === 'export') {
+      if (!isAdmin) return deny();
+      const t = await db.get('technicians', r1); if (!t) return notFound();
+      const [assignments, absences, timesheets, journalAll] = await Promise.all([db.list('assignments'), db.list('absences'), db.list('timesheets'), db.listJournal(1000)]);
+      await log(user, 'export fiche complète', 'technicien', t.id, t.firstName + ' ' + t.lastName);
+      return ok({
+        exportedAt: now(), exportedBy: user.login, technician: t,
+        habilitations: (t.habilitations || []).map((h) => ({ ...h, conformite: habCompliance(h) })),
+        assignments: assignments.filter((a) => a.techId === t.id), absences: absences.filter((a) => a.techId === t.id),
+        timesheets: timesheets.filter((f) => f.techId === t.id || (f.lines || []).some((l) => l.techId === t.id)),
+        journal: journalAll.filter((j) => j.entity === 'technicien' && j.id === t.id),
+      });
+    }
     if (m === 'DELETE' && r1 && r2 === 'habilitations' && r3) {
       if (!isAdmin) return deny();
       const t = await db.get('technicians', r1); if (!t) return notFound();
@@ -429,7 +484,7 @@ async function route(req) {
     const sc = await scope(user);
     if (m === 'POST' && !r1) {
       if (!isAdmin) return deny();
-      const c = { id: 'C' + rid(8), name: str(body.name, 120), siteId: str(body.siteId, 20), address: str(body.address, 250), client: str(body.client, 120), chefId: str(body.chefId, 40), start: date(body.start), endPlanned: date(body.endPlanned), status: CHANTIER_STATUS.includes(body.status) ? body.status : 'En préparation', team: Array.isArray(body.team) ? body.team.map((x) => str(x, 20)) : [], description: str(body.description, 2000), createdAt: now(), updatedAt: now() };
+      const c = { id: 'C' + rid(8), critical: !!body.critical, name: str(body.name, 120), siteId: str(body.siteId, 20), address: str(body.address, 250), client: str(body.client, 120), chefId: str(body.chefId, 40), start: date(body.start), endPlanned: date(body.endPlanned), status: CHANTIER_STATUS.includes(body.status) ? body.status : 'En préparation', team: Array.isArray(body.team) ? body.team.map((x) => str(x, 20)) : [], description: str(body.description, 2000), createdAt: now(), updatedAt: now() };
       if (!c.name) return bad('Le nom du chantier est obligatoire.');
       if (badOrder(c.start, c.endPlanned, 'x')) return bad('La date de fin prévue ne peut pas être avant la date de début.');
       if (sc.chantiers.some((x) => x.name.toLowerCase() === c.name.toLowerCase())) return bad('Un chantier porte déjà ce nom. Ajoutez une précision (lieu, phase…).');
@@ -444,6 +499,7 @@ async function route(req) {
       if (isAdmin) {
         for (const k of ['name', 'address', 'client', 'chefId', 'description', 'siteId']) if (body[k] !== undefined) c[k] = str(body[k], k === 'description' ? 2000 : 250);
         for (const k of ['start', 'endPlanned']) if (body[k] !== undefined) c[k] = date(body[k]);
+        if (body.critical !== undefined) c.critical = !!body.critical;
         if (body.status && CHANTIER_STATUS.includes(body.status)) c.status = body.status;
         if (Array.isArray(body.team)) c.team = body.team.map((x) => str(x, 20));
         if (!c.name) return bad('Le nom du chantier est obligatoire.');
@@ -542,6 +598,22 @@ async function route(req) {
       const a = { id: 'A' + rid(8), techId: str(body.techId, 20), chantierId: body.chantierId, date: date(body.date), slot: SLOTS.includes(body.slot) ? body.slot : 'journée', note: str(body.note, 200), createdBy: user.login, createdAt: now() };
       if (!a.date || !a.techId) return bad('Technicien et date obligatoires.');
       const conflicts = await conflictsFor(a);
+      {
+        const [tech, ch] = await Promise.all([db.get('technicians', a.techId), db.get('chantiers', a.chantierId)]);
+        const issues = complianceIssues(tech, a.date, !!(ch && ch.critical));
+        if (issues.length) {
+          const d = body.derogation;
+          if (d && isAdmin) {
+            const reason = str(d.reason, 300), until = date(d.until);
+            if (reason.length < 10) return bad('Dérogation QHSE : le motif écrit est obligatoire (10 caractères minimum).');
+            if (!until || until < a.date) return bad('Dérogation QHSE : la date de fin de validité est obligatoire et ne peut pas précéder l\'affectation.');
+            a.derogation = { reason, until, by: user.login, at: now(), issues };
+            await log(user, 'dérogation QHSE accordée', 'planning', a.id, a.techId + ' ' + a.date + ' jusqu\'au ' + until + ' — ' + reason + ' — ' + issues.join(' ; '));
+          } else {
+            return json(409, { error: 'Affectation refusée : technicien non conforme (' + issues.join(' ; ') + ').' + (isAdmin ? ' Une dérogation QHSE écrite et limitée dans le temps est possible.' : ''), code: 'NON_CONFORME', issues, derogationPossible: isAdmin });
+          }
+        }
+      }
       await db.put('assignments', a.id, a);
       await log(user, 'affectation', 'planning', a.id, a.techId + ' ' + a.date + (conflicts.length ? ' (conflit)' : ''));
       return ok({ ...a, conflicts });
