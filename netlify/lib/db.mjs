@@ -9,6 +9,7 @@
 import { createHash } from 'node:crypto';
 import { getStore } from '@netlify/blobs';
 import { vercelStore } from './store-vercel.mjs';
+import { supabaseStore } from './store-supabase.mjs';
 
 const STORE = 'mimouni';
 
@@ -16,9 +17,13 @@ const STORE = 'mimouni';
 // Netlify Blobs fourni à chaque requête expire. Un store mémorisé dans une
 // fonction restée « chaude » provoquait « Token expired » puis « Erreur serveur »
 // sur toutes les requêtes (connexion comprise) au bout de quelques dizaines de minutes.
-// Hébergeur choisi selon l'environnement : Vercel Blob si BLOB_READ_WRITE_TOKEN existe,
-// sinon Netlify Blobs (le code Netlify reste inchangé).
+// Hébergeur choisi selon l'environnement, par ordre de priorité :
+//  1. Supabase (PostgreSQL) si SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY existent ;
+//  2. Vercel Blob si BLOB_READ_WRITE_TOKEN existe ;
+//  3. Netlify Blobs sinon (le code Netlify reste inchangé).
+// Les trois adaptateurs exposent la même interface : rien d'autre à modifier.
 function store() {
+  if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) return supabaseStore();
   if (process.env.BLOB_READ_WRITE_TOKEN) return vercelStore();
   return getStore({ name: STORE, consistency: 'strong' });
 }
